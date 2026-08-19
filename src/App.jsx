@@ -145,6 +145,19 @@ export default function App() {
   useEffect(() => {
     localStorage.removeItem('claro_openai_key');
     localStorage.removeItem('claro_email_password');
+
+    // Auto-fetch server-configured OpenAI Key if not set in local storage
+    fetch('/api/config/openai-key')
+      .then(res => res.json())
+      .then(data => {
+        if (data.apiKey) {
+          setDecryptedApiKey(prev => prev || data.apiKey);
+          if (!localStorage.getItem('claro_active_api_key')) {
+            localStorage.setItem('claro_active_api_key', data.apiKey);
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {

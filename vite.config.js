@@ -150,6 +150,12 @@ export default defineConfig({
             return;
           }
 
+          if (req.url.startsWith('/api/config/openai-key') && req.method === 'GET') {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify({ apiKey: process.env.OPENAI_API_KEY || '' }));
+            return;
+          }
+
           if (req.url.startsWith('/api/sharepoint/sync') && req.method === 'POST') {
             try {
               const body = await readJsonBody(req);

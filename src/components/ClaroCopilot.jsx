@@ -124,7 +124,18 @@ export default function ClaroCopilot({
     }
   }, [prefilledQuery]);
 
-  const rawKey = apiKey || localStorage.getItem('claro_active_api_key') || '';
+  const [serverApiKey, setServerApiKey] = useState('');
+
+  useEffect(() => {
+    fetch('/api/config/openai-key')
+      .then(res => res.json())
+      .then(data => {
+        if (data.apiKey) setServerApiKey(data.apiKey);
+      })
+      .catch(() => {});
+  }, []);
+
+  const rawKey = apiKey || localStorage.getItem('claro_active_api_key') || serverApiKey || '';
   const activeApiKey = rawKey.trim();
 
   const processUserMessage = async (userMsgText) => {

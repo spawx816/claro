@@ -149,6 +149,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Config Endpoint: Expose server-configured OpenAI Key
+  if (pathname === '/api/config/openai-key' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ apiKey: process.env.OPENAI_API_KEY || '' }));
+    return;
+  }
+
   // ==========================================================
   // SHAREPOINT & DOCUMENT EXPLORER API ENDPOINTS
   // ==========================================================
