@@ -55,8 +55,12 @@ export default function App() {
     }
     return s;
   });
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [masterPassword, setMasterPassword] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('claro_session_active') === 'true' || sessionStorage.getItem('claro_session_active') === 'true';
+  });
+  const [masterPassword, setMasterPassword] = useState(() => {
+    return sessionStorage.getItem('claro_session_pass') || '';
+  });
   
   // Decrypted sensitive data kept strictly in-memory
   const [decryptedApiKey, setDecryptedApiKey] = useState(() => {
@@ -176,6 +180,21 @@ export default function App() {
     }
   }, [decryptedEmailPassword, isAuthenticated, masterPassword, salt]);
 
+  // Restore decrypted credentials on page refresh if active session exists
+  useEffect(() => {
+    const savedPass = sessionStorage.getItem('claro_session_pass');
+    if (isAuthenticated && savedPass) {
+      const encKey = localStorage.getItem('claro_openai_key_enc') || '';
+      const encPass = localStorage.getItem('claro_email_password_enc') || '';
+      if (encKey && !decryptedApiKey) {
+        decryptData(encKey, savedPass, salt).then(k => { if (k) setDecryptedApiKey(k); }).catch(() => {});
+      }
+      if (encPass && !decryptedEmailPassword) {
+        decryptData(encPass, savedPass, salt).then(p => { if (p) setDecryptedEmailPassword(p); }).catch(() => {});
+      }
+    }
+  }, [isAuthenticated, salt]);
+
   // Activity listener for automatic Terminal Time-Out (MAN10 5.6.5.7)
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -214,6 +233,9 @@ export default function App() {
   };
 
   const handleLogout = (reason = 'USER') => {
+    localStorage.removeItem('claro_session_active');
+    sessionStorage.removeItem('claro_session_active');
+    sessionStorage.removeItem('claro_session_pass');
     setMasterPassword('');
     setDecryptedApiKey('');
     setDecryptedEmailPassword('');
@@ -294,6 +316,9 @@ export default function App() {
         userName={userName}
         onPasswordConfigured={async (hash, rawPassword) => {
           localStorage.setItem('claro_master_hash', hash);
+          localStorage.setItem('claro_session_active', 'true');
+          sessionStorage.setItem('claro_session_active', 'true');
+          sessionStorage.setItem('claro_session_pass', rawPassword);
           setMasterPasswordHash(hash);
           setMasterPassword(rawPassword);
           setDecryptedApiKey('');
@@ -312,6 +337,9 @@ export default function App() {
         masterPasswordHash={masterPasswordHash}
         userName={userName}
         onLoginSuccess={async (rawPassword) => {
+          localStorage.setItem('claro_session_active', 'true');
+          sessionStorage.setItem('claro_session_active', 'true');
+          sessionStorage.setItem('claro_session_pass', rawPassword);
           setMasterPassword(rawPassword);
           const encKey = localStorage.getItem('claro_openai_key_enc') || '';
           const encPass = localStorage.getItem('claro_email_password_enc') || '';
