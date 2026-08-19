@@ -1,0 +1,15 @@
+De: soporte.redes@claro.com.do
+Asunto: Falla Masiva: Rotura de fibra óptica en Autopista Duarte
+Cuerpo:
+Estimados clientes,
+
+Se les informa que actualmente presentamos una rotura física en nuestro anillo principal de fibra óptica en el km 54 de la Autopista Duarte, provocado por maquinarias de construcción vial ajenas a Claro.
+
+Servicios Afectados:
+- Internet Dedicado y Enlaces de Datos en zona Norte (Santiago, La Vega, Puerto Plata).
+
+El personal de redes ya se encuentra en el sitio realizando los empalmes correspondientes. Se estima un tiempo estimado de solución de 3 horas.
+
+Atentamente,
+Dirección de Aseguramiento de Red
+Claro Dominicana

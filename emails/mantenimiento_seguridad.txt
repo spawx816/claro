@@ -1,0 +1,14 @@
+De: ciso@claro.com.do
+Asunto: Urgente: Actualización de Parche de Seguridad Crítico en FortiGate HPBX
+Cuerpo:
+Estimado equipo técnico y clientes de Centralita Virtual,
+
+Les comunicamos que el día de hoy se ha liberado un boletín de seguridad urgente relativo a una vulnerabilidad crítica de desbordamiento de búfer detectada en los sistemas FortiGate que manejan nuestras troncales de seguridad HPBX.
+
+Estaremos aplicando el parche de seguridad correspondiente hoy 29 de junio a las 22:00. Se estima un tiempo de reinicio de dispositivos de seguridad de 10 minutos, durante los cuales las llamadas entrantes y salientes de la Centralita Virtual podrían experimentar desconexiones momentáneas.
+
+Por favor, tomen las medidas necesarias.
+
+Saludos cordiales,
+Departamento de Seguridad de la Información (CISO)
+Claro Dominicana
