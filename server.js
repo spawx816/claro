@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { getMessages, saveMessage, clearMessages, getQuotes, getCommercialDocuments, saveCommercialDocument, bulkSaveCommercialDocuments } from './db.js';
+import { getMessages, saveMessage, clearMessages, getQuotes, clearAllQuotes, deleteQuote, getClientFolders, getCommercialDocuments, saveCommercialDocument, bulkSaveCommercialDocuments } from './db.js';
 import mammoth from 'mammoth';
 import XLSX from 'xlsx';
 
@@ -146,6 +146,29 @@ const server = http.createServer(async (req, res) => {
     const quotes = await getQuotes();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(quotes));
+    return;
+  }
+
+  if (pathname === '/api/chat/quotes' && req.method === 'DELETE') {
+    const result = await clearAllQuotes();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+    return;
+  }
+
+  if (pathname.startsWith('/api/chat/quotes/') && req.method === 'DELETE') {
+    const quoteId = pathname.replace('/api/chat/quotes/', '');
+    const result = await deleteQuote(quoteId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+    return;
+  }
+
+  // Client Folders Endpoint: Aggregated quotes and documents per client
+  if (pathname === '/api/clients/folders' && req.method === 'GET') {
+    const folders = await getClientFolders();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(folders));
     return;
   }
 

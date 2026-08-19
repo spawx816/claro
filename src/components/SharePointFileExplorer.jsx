@@ -682,6 +682,47 @@ export default function SharePointFileExplorer({
                   </button>
                 );
               })}
+
+              {/* Dynamic Client Dossiers Folders */}
+              {documents.some(d => d.folder && d.folder.startsWith('Clientes/')) && (
+                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '6px', paddingLeft: '8px' }}>
+                    📁 Expedientes Clientes
+                  </div>
+                  {Array.from(new Set(documents.filter(d => d.folder && d.folder.startsWith('Clientes/')).map(d => d.folder))).map(clientFolder => {
+                    const isSelected = selectedFolder === clientFolder;
+                    const clientName = clientFolder.replace('Clientes/', '');
+                    const count = documents.filter(d => d.folder === clientFolder).length;
+                    return (
+                      <button 
+                        key={clientFolder}
+                        onClick={() => { setSelectedFolder(clientFolder); setSelectedCategory('Todos'); }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '7px 10px',
+                          borderRadius: 'var(--radius-md)',
+                          border: 'none',
+                          backgroundColor: isSelected ? 'var(--claro-red-light)' : 'transparent',
+                          color: isSelected ? 'var(--claro-red)' : 'var(--text-primary)',
+                          fontWeight: isSelected ? '700' : '500',
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          marginLeft: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <Folder size={14} color="#D97706" />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{clientName}</span>
+                        </div>
+                        <span className="badge" style={{ fontSize: '0.65rem', padding: '1px 5px' }}>{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
