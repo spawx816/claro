@@ -447,11 +447,14 @@ Calcula los totales correctamente. No incluyas impuestos en el total (indica en 
     else if (text.includes('internet') || text.includes('dedicado') || text.includes('fibra')) {
       reply = `El **Internet Dedicado por Fibra Óptica** brinda ancho de banda 100% simétrico y disponibilidad del 99.9% (SLA). Requiere un levantamiento de factibilidad por dirección. ¿Te gustaría que registremos una evaluación técnica para tu localidad?`;
     }
-    else if (text.includes('hola') || text.includes('buenos dias') || text.includes('buenas tardes')) {
-      reply = `¡Hola! Qué gusto saludarte. Soy Clara, tu especialista en servicios empresariales de Claro. ¿Qué solución deseas cotizar o consultar hoy?`;
+    else if (text.includes('quien eres') || text.includes('quién eres') || text.includes('presentate') || text.includes('presentate') || text.includes('que haces') || text.includes('qué haces') || text.includes('tu nombre')) {
+      reply = `¡Hola! 👋 Soy **Clara**, tu Consultora Comercial y Asistente con Inteligencia Artificial para **Claro Dominicana (Soluciones Corporativas y Negocios)**.\n\nEstoy aquí para ayudarte a:\n- 📞 **Elaborar cotizaciones formales de Hosted PBX** (Planes PYMES y Corporativo con teléfonos Grandstream serie GRP).\n- ☁️ **Configurar servidores Claro Cloud** y Data Center Virtual en Santo Domingo.\n- 🔒 **Asesorarte en Ciberseguridad, Enlaces MPLS y SD-WAN**.\n- 📊 **Generar propuestas imprimibles y plantillas Excel oficiales** listas para tus clientes.\n\n¿Qué cliente o solución deseas que preparemos hoy?`;
+    }
+    else if (text.includes('hola') || text.includes('buenos dias') || text.includes('buenas tardes') || text.includes('saludos') || text.includes('hey')) {
+      reply = `¡Hola! Qué gusto saludarte. Soy **Clara**, tu asistente ejecutiva de Claro Negocios. 🇩🇴\n\nPuedo cotizarte al instante cualquier solución de telecomunicaciones o consultar nuestro catálogo oficial. ¿En qué puedo apoyarte hoy?`;
     }
     else {
-      reply = `Entendido. Puedo brindarte información completa y cotizaciones al instante de: **Central Virtual HPBX**, **Cloud Server**, **Planes Móviles 5G**, **Internet Dedicado** y **SD-WAN**.\n\n¿De cuál de estos servicios necesitas una propuesta formal?`;
+      reply = `¡Con gusto te asisto! Como consultora comercial de **Claro Negocios**, puedo brindarte información técnica y cotizaciones inmediatas de:\n\n- 📞 **Hosted PBX (Centralitas Virtuales)** para PYMES y Grandes Empresas.\n- ☁️ **Cloud Servers & IaaS**.\n- 📱 **Planes Móviles Corporativos 5G**.\n- 🌐 **Internet Dedicado y Redes MPLS**.\n\nEscríbeme por ejemplo: *"Cotízame una HPBX de 6 usuarios para Farmacia Carol"* o haz clic en una de las sugerencias rápidas abajo.`;
     }
 
     const botMsgObj = {
