@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Printer, Download, X, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import { exportQuoteToExcel } from '../utils/exportQuoteToExcel';
 
@@ -16,7 +17,7 @@ export default function OfficialQuoteModal({ quote, onClose }) {
     exportQuoteToExcel(quote);
   };
 
-  return (
+  const modalContent = (
     <div className="modal-backdrop official-quote-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-panel animate-scale-in official-quote-modal-panel" style={{ maxWidth: '850px', padding: '0', borderRadius: '16px', overflow: 'hidden' }}>
         
@@ -435,4 +436,6 @@ export default function OfficialQuoteModal({ quote, onClose }) {
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
