@@ -94,6 +94,21 @@ export default function QuotationRepo() {
     }
   };
 
+  // Handle deleting an entire client dossier folder
+  const handleDeleteClientFolder = async (clientName) => {
+    try {
+      const res = await fetch(`/api/clients/folders/${encodeURIComponent(clientName)}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchData();
+        if (dossierClient && dossierClient.clientName === clientName) {
+          setDossierClient(null);
+        }
+      }
+    } catch (err) {
+      console.error("Error deleting client folder:", err);
+    }
+  };
+
   // Filtered quotes
   const filteredQuotes = useMemo(() => {
     return quotes.filter(q => {
@@ -602,6 +617,18 @@ export default function QuotationRepo() {
                           >
                             <Printer size={13} /> PDF
                           </button>
+                          <button 
+                            onClick={() => {
+                              if (window.confirm(`¿Deseas eliminar el expediente completo y todas las cotizaciones de "${client.clientName}"?`)) {
+                                handleDeleteClientFolder(client.clientName);
+                              }
+                            }}
+                            className="btn btn-secondary" 
+                            style={{ padding: '6px 8px', fontSize: '0.75rem', color: '#ef4444' }}
+                            title="Eliminar este cliente y sus cotizaciones"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -739,13 +766,27 @@ export default function QuotationRepo() {
                 </div>
               </div>
 
-              <button 
-                onClick={() => setDossierClient(null)}
-                className="btn btn-secondary"
-                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-              >
-                Cerrar
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button 
+                  onClick={() => {
+                    if (window.confirm(`¿Deseas eliminar todas las cotizaciones del expediente de "${dossierClient.clientName}"?`)) {
+                      handleDeleteClientFolder(dossierClient.clientName);
+                    }
+                  }}
+                  className="btn"
+                  style={{ padding: '6px 12px', fontSize: '0.8rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Trash2 size={13} /> Eliminar Expediente
+                </button>
+
+                <button 
+                  onClick={() => setDossierClient(null)}
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
 
             {/* Modal Body - Quotes List */}

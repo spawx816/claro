@@ -419,6 +419,26 @@ export async function deleteQuote(quoteId) {
   return { success: true };
 }
 
+// Delete an entire client folder with all its quotes and documents
+export async function deleteClientFolder(clientName) {
+  if (isPostgresAvailable && pool) {
+    try {
+      await pool.query(`DELETE FROM chat_quotes WHERE client_name = $1 OR client_folder = $2`, [clientName, `Clientes/${clientName}`]);
+      await pool.query(`DELETE FROM commercial_documents WHERE folder = $1`, [`Clientes/${clientName}`]);
+    } catch (err) {
+      console.error("PostgreSQL deleteClientFolder error:", err.message);
+    }
+  }
+
+  const db = readLocalDb();
+  db.quotes = (db.quotes || []).filter(q => (q.clientName || q.quoteObj?.customer?.name) !== clientName && q.clientFolder !== `Clientes/${clientName}`);
+  if (db.documents) {
+    db.documents = db.documents.filter(d => d.folder !== `Clientes/${clientName}`);
+  }
+  writeLocalDb(db);
+  return { success: true };
+}
+
 // Get all client folders grouped with their quotes & documents
 export async function getClientFolders() {
   const quotes = await getQuotes();

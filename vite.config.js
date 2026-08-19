@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
-import { getMessages, saveMessage, clearMessages, getQuotes, clearAllQuotes, deleteQuote, getClientFolders, getCommercialDocuments, saveCommercialDocument, bulkSaveCommercialDocuments } from './db.js'
+import { getMessages, saveMessage, clearMessages, getQuotes, clearAllQuotes, deleteQuote, deleteClientFolder, getClientFolders, getCommercialDocuments, saveCommercialDocument, bulkSaveCommercialDocuments } from './db.js'
 import mammoth from 'mammoth'
 import XLSX from 'xlsx'
 
@@ -143,6 +143,14 @@ export default defineConfig({
             const folders = await getClientFolders();
             res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
             res.end(JSON.stringify(folders));
+            return;
+          }
+
+          if (req.url.startsWith('/api/clients/folders/') && req.method === 'DELETE') {
+            const clientName = decodeURIComponent(req.url.replace('/api/clients/folders/', ''));
+            const result = await deleteClientFolder(clientName);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify(result));
             return;
           }
 
