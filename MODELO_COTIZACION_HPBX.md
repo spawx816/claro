@@ -46,6 +46,18 @@ Este documento define la estructura y reglas de negocio para modelar cotizacione
 #### Equipos Renta (18% ITBIS)
 | No. Parte | Descripción | Precio Unitario RD$ |
 | :--- | :--- | :---: |
+| `HGRP2602` | Teléfono Grandstream GRP2602 | $190.00 |
+| `HGRP2603` | Teléfono Grandstream GRP2603 | $220.00 |
+| `HGRP2612` | Teléfono Grandstream GRP2612 | $320.00 |
+| `HGRP2624` | Teléfono Grandstream GRP2624 | $365.00 |
+| `HGRP2614` | Teléfono Grandstream GRP2614 | $460.00 |
+| `HGRP2616` | Teléfono Grandstream GRP2616 | $795.00 |
+| `HGXP2140` | Teléfono Grandstream GXP2140 | $830.00 |
+| `HGRP2615` | Teléfono Grandstream GRP2615 | $1,275.00 |
+| `BHDP752` | Base Grandstream DP752 | $270.00 |
+| `BHDP722` | Tel Inalámbrico Grandstream DP722 | $285.00 |
+| `HBTGBX20` | Botonera Grandstream GBX20 | $895.00 |
+| `BGP2200` | Botonera GXP2200 EXT | $765.00 |
 | `HPMRAU25` | Renta Router Audiocodes 25 Usuarios | $2,600.00 |
 | `HPMSWC8` | Renta Switch de 8 Puertos PoE | $515.00 |
 | `HPMSWC24` | Renta Switch de 24 Puertos PoE | $1,535.00 |
@@ -94,6 +106,18 @@ Este documento define la estructura y reglas de negocio para modelar cotizacione
 #### Equipos Renta (18% ITBIS)
 | No. Parte | Descripción | Precio Unitario RD$ |
 | :--- | :--- | :---: |
+| `GRP260201` | 1 Tel GrandS GRP2602 | $190.00 |
+| `GRP260301` | 1 Tel GrandS GRP2603 | $220.00 |
+| `GRP261201` | 1 Tel GrandS GRP2612 | $320.00 |
+| `GRP262401` | 1 Tel GrandS GRP2624 | $365.00 |
+| `GRP261401` | 1 Tel GrandS GRP2614 | $460.00 |
+| `GRP261601` | 1 Tel GrandS GRP2616 | $795.00 |
+| `GXP214001` | 1 Tel GrandS GXP2140 | $830.00 |
+| `GRP261501` | 1 Tel GrandS GRP2615 | $1,275.00 |
+| `DP75201` | 1 Base GrandS DP752 | $270.00 |
+| `DP72201` | 1 Tel Inalámbrico DP722 | $285.00 |
+| `BGBX2001` | 1 Botonera GrandS GBX20 | $895.00 |
+| `BGXP22001` | 1 Botonera GXP2200 EXT | $765.00 |
 | `HPRTAC25` | Renta Router Audiocodes 25 Usuarios | $2,600.00 |
 | `HPRTAC50` | Renta Router Audiocodes 50 Usuarios | $2,835.00 |
 | `HPRTAC100` | Renta Router Audiocodes 100 Usuarios | $3,075.00 |

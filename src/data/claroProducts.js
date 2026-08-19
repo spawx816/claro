@@ -5,6 +5,7 @@
 
 export const CLARO_CLOUD_CATEGORIES = [
   'Todos',
+  'Telefonía IP & HPBX',
   'Infraestructura',
   'Seguridad',
   'Colaboración',
@@ -14,6 +15,51 @@ export const CLARO_CLOUD_CATEGORIES = [
 ];
 
 export const productsData = [
+  // ==========================================
+  // 0. TELEFONÍA IP & HOSTED PBX (HPBX)
+  // ==========================================
+  {
+    id: 'hpbx-pymes',
+    name: 'Hosted PBX Claro PYMES (Grandstream GRP Series)',
+    category: 'Telefonía IP & HPBX',
+    portalUrl: 'https://www.claro.com.do/negocios/telefonia/hosted-pbx/',
+    shortDescription: 'Central telefónica virtual en la nube para PYMES (Base 3 usuarios, 1,500 min LDN, MPLS) con teléfonos Grandstream GRP.',
+    price: 'Desde RD$ 2,775.00 / mes (Neto)',
+    badge: 'Grandstream GRP',
+    details: {
+      minUsers: '3 Estaciones Base',
+      setupFee: 'RD$ 1,575.00 Base',
+      features: [
+        'Incluye 3 estaciones base y 1,500 minutos de Larga Distancia Nacional (LDN)',
+        'Teléfonos IP Grandstream GRP2602 ($190/mes), GRP2603 ($220/mes), GRP2612 ($320/mes), GRP2616 ($795/mes)',
+        'Solución Inalámbrica DECT: Base Grandstream DP752 ($270/mes) y Handset DP722 ($285/mes)',
+        'Botoneras de expansión: Grandstream GBX20 ($895/mes) y GXP2200 EXT ($765/mes)',
+        'Conectividad privada MPLS, Auto Attendant IVR, Recepcionista y DID IP'
+      ]
+    },
+    longDescription: 'Centralita telefónica en la nube de Claro Dominicana para pequeñas y medianas empresas. Elimina la inversión en PBX físicas y moderniza tus extensiones con la serie Grandstream GRP.'
+  },
+  {
+    id: 'hpbx-corporativo',
+    name: 'Hosted PBX Claro Corporativo (Grandstream GRP Series)',
+    category: 'Telefonía IP & HPBX',
+    portalUrl: 'https://www.claro.com.do/negocios/telefonia/hosted-pbx/',
+    shortDescription: 'Central IP de alto rendimiento para corporaciones (Base 8 usuarios, 5,000 min LDN, Router AudioCodes y Grandstream GRP).',
+    price: 'Desde RD$ 7,385.00 / mes (Neto)',
+    badge: 'Corporativo Premium',
+    details: {
+      minUsers: '8 Estaciones Base',
+      setupFee: 'RD$ 4,200.00 Base',
+      features: [
+        'Incluye 8 usuarios base, 5,000 minutos LDN, MPLS corporativo y Router AudioCodes',
+        'Modelos ejecutivos Grandstream GRP2614 ($460/mes), GRP2615 ($1,275/mes), GRP2616 ($795/mes) y GXP2140 ($830/mes)',
+        'Escalabilidad en paquetes de 5, 25 y 100 teléfonos con tarifas preferenciales',
+        'Mensajería Unificada (correo de voz a email) y Licencias Softphone Webex',
+        'Garantía SLA de disponibilidad y soporte empresarial 24/7'
+      ]
+    },
+    longDescription: 'Solución empresarial de comunicaciones unificadas con redundancia de red, enrutamiento inteligente AudioCodes y la nueva gama de teléfonos Grandstream GRP de alta definición acústica.'
+  },
   // ==========================================
   // 1. INFRAESTRUCTURA
   // ==========================================

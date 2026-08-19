@@ -28,6 +28,22 @@ export const HPBX_CATALOG_PYMES = {
     { partNumber: 'HPMSWC8', description: 'Renta Switch de 8 Puertos PoE', price: 515.00, category: 'SWITCHES CISCO PoE' },
     { partNumber: 'HPMSWC24', description: 'Renta Switch de 24 Puertos PoE', price: 1535.00, category: 'SWITCHES CISCO PoE' },
     { partNumber: 'HPMWBSP', description: 'Usuario Licencia Webex (Softphone)', price: 255.00, category: 'TERMINALES IP Y SERVICIOS' },
+    
+    // Modelos Nuevos Grandstream GRP & Inalámbricos (Catálogo Oficial Vigente)
+    { partNumber: 'HGRP2602', description: 'Teléfono Grandstream GRP2602', price: 190.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HGRP2603', description: 'Teléfono Grandstream GRP2603', price: 220.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HGRP2612', description: 'Teléfono Grandstream GRP2612', price: 320.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HGRP2624', description: 'Teléfono Grandstream GRP2624', price: 365.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HGRP2614', description: 'Teléfono Grandstream GRP2614', price: 460.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HGRP2616', description: 'Teléfono Grandstream GRP2616', price: 795.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HGXP2140', description: 'Teléfono Grandstream GXP2140', price: 830.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HGRP2615', description: 'Teléfono Grandstream GRP2615', price: 1275.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'BHDP752', description: 'Base Grandstream DP752', price: 270.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'BHDP722', description: 'Tel Inalambrico Grandstream DP722', price: 285.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'HBTGBX20', description: 'Botonera Grandstream GBX20', price: 895.00, category: 'TERMINALES IP Y SERVICIOS' },
+    { partNumber: 'BGP2200', description: 'Botonera GXP2200 EXT', price: 765.00, category: 'TERMINALES IP Y SERVICIOS' },
+
+    // Modelos Tradicionales
     { partNumber: 'HGXP1625', description: 'Renta Teléfono GXP 1625 (2 Líneas)', price: 137.00, category: 'TERMINALES IP Y SERVICIOS' },
     { partNumber: 'HGXP2130', description: 'Renta Teléfono GXP 2130 (3 Líneas)', price: 237.00, category: 'TERMINALES IP Y SERVICIOS' },
     { partNumber: 'HGXP2160', description: 'Renta Teléfono GXP 2160 (6 Líneas + Botonera)', price: 321.00, category: 'TERMINALES IP Y SERVICIOS' },
@@ -86,6 +102,69 @@ export const HPBX_CATALOG_CORP = {
     { partNumber: 'HPCPESW1', description: 'Renta Switch de 8 Puertos PoE', price: 515.00, category: 'SWITCHES CISCO PoE' },
     { partNumber: 'HPCPESW2', description: 'Renta Switch de 24 Puertos PoE', price: 1535.00, category: 'SWITCHES CISCO PoE' },
     { partNumber: 'SOX0101', description: 'Usuario Licencia Softphone (Webex)', price: 255.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    // Modelos Nuevos Grandstream GRP & Inalámbricos (Catálogo Oficial Vigente)
+    { partNumber: 'GRP260201', description: '1 Tel GrandS GRP2602', price: 190.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP260205', description: '5 Tel GrandS GRP2602', price: 950.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP260225', description: '25 Tel GrandS GRP2602', price: 4750.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GP2602100', description: '100 Tel GrandS GRP2602', price: 19000.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'GRP260301', description: '1 Tel GrandS GRP2603', price: 220.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP260305', description: '5 Tel GrandS GRP2603', price: 1100.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP260325', description: '25 Tel GrandS GRP2603', price: 5500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GP2603100', description: '100 Tel GrandS GRP2603', price: 22000.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'GRP261201', description: '1 Tel GrandS GRP2612', price: 320.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261205', description: '5 Tel GrandS GRP2612', price: 1600.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261225', description: '25 Tel GrandS GRP2612', price: 8000.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GP2612100', description: '100 Tel GrandS GRP2612', price: 32000.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'GRP262401', description: '1 Tel GrandS GRP2624', price: 365.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP262405', description: '5 Tel GrandS GRP2624', price: 1825.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP262425', description: '25 Tel GrandS GRP2624', price: 9125.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GP2624100', description: '100 Tel GrandS GRP2624', price: 36500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'GRP261401', description: '1 Tel GrandS GRP2614', price: 460.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261405', description: '5 Tel GrandS GRP2614', price: 2300.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261425', description: '25 Tel GrandS GRP2614', price: 11500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GP2614100', description: '100 Tel GrandS GRP2614', price: 46000.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'GRP261601', description: '1 Tel GrandS GRP2616', price: 795.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261605', description: '5 Tel GrandS GRP2616', price: 3975.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261625', description: '25 Tel GrandS GRP2616', price: 19875.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'G2616100', description: '100 Tel GrandS GRP2616', price: 79500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'GXP214001', description: '1 Tel GrandS GXP2140', price: 830.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GXP214005', description: '5 Tel GrandS GXP2140', price: 4150.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GXP214025', description: '25 Tel GrandS GXP2140', price: 20750.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'G2140100', description: '100 Tel GrandS GXP2140', price: 83000.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'GRP261501', description: '1 Tel GrandS GRP2615', price: 1275.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261505', description: '5 Tel GrandS GRP2615', price: 6375.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GRP261525', description: '25 Tel GrandS GRP2615', price: 31875.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'GP2615100', description: '100 Tel GrandS GRP2615', price: 127500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'DP75201', description: '1 Base GrandS DP752', price: 270.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'DP75205', description: '5 Base GrandS DP752', price: 1350.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'DP75225', description: '25 Base GrandS DP752', price: 6750.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'DP752100', description: '100 Base GrandS DP752', price: 27000.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'DP72201', description: '1 Tel Inalambrico DP722', price: 285.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'DP72205', description: '5 Tel Inalambrico DP722', price: 1425.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'DP72225', description: '25 Tel Inalambrico DP722', price: 7125.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'DP722100', description: '100 Tel Inalambrico DP722', price: 28500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'BGBX2001', description: '1 Boto GrandS GBX20', price: 895.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'BGBX2005', description: '5 Boto GrandS GBX20', price: 4475.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'BGBX2025', description: '25 Boto GrandS GBX20', price: 22375.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'BGBX20100', description: '100 Boto GrandS GBX20', price: 89500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    { partNumber: 'BGXP22001', description: '1 Boto GXP2200 EXT', price: 765.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'BGXP22005', description: '5 Boto GXP2200 EXT', price: 3825.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'BG220025', description: '25 Boto GXP2200 EXT', price: 19125.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+    { partNumber: 'BG2200100', description: '100 Boto GXP2200 EXT', price: 76500.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
+
+    // Modelos Tradicionales
     { partNumber: 'GSX162501', description: 'Renta Teléfono GXP 1625 (2 Líneas)', price: 137.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
     { partNumber: 'GSX213001', description: 'Renta Teléfono GXP 2130 (3 Líneas)', price: 237.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
     { partNumber: 'GSX216001', description: 'Renta Teléfono GXP 2160 (6 Líneas + Botonera)', price: 322.00, category: 'ESTACIONES IP VIRTUAL WEBEX' },
@@ -342,31 +421,80 @@ export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Cla
     sw24Qty = sw24Match[1] ? parseInt(sw24Match[1]) : 1;
   }
 
-  // 5. Equipment - IP Phones
+  // 5. Equipment - IP Phones & Accessories
+  let grp2602Qty = 0;
+  let grp2603Qty = 0;
+  let grp2612Qty = 0;
+  let grp2624Qty = 0;
+  let grp2614Qty = 0;
+  let grp2616Qty = 0;
+  let gxp2140Qty = 0;
+  let grp2615Qty = 0;
+  let dp752Qty = 0;
+  let dp722Qty = 0;
+  let gbx20Qty = 0;
+  let gxp2200Qty = 0;
+
   let gxp1625Qty = 0;
   let gxp2130Qty = 0;
   let gxp2160Qty = 0;
   let softphonesQty = 0;
 
+  const p2602Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2602/i);
+  if (p2602Match) grp2602Qty = parseInt(p2602Match[1]) || 1;
+
+  const p2603Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2603/i);
+  if (p2603Match) grp2603Qty = parseInt(p2603Match[1]) || 1;
+
+  const p2612Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2612/i);
+  if (p2612Match) grp2612Qty = parseInt(p2612Match[1]) || 1;
+
+  const p2624Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2624/i);
+  if (p2624Match) grp2624Qty = parseInt(p2624Match[1]) || 1;
+
+  const p2614Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2614/i);
+  if (p2614Match) grp2614Qty = parseInt(p2614Match[1]) || 1;
+
+  const p2616Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2616/i);
+  if (p2616Match) grp2616Qty = parseInt(p2616Match[1]) || 1;
+
+  const p2140Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*2140/i);
+  if (p2140Match) gxp2140Qty = parseInt(p2140Match[1]) || 1;
+
+  const p2615Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2615/i);
+  if (p2615Match) grp2615Qty = parseInt(p2615Match[1]) || 1;
+
+  const dp752Match = lower.match(/(\d+)\s*(?:bases?|base)?\s*(?:dp)?\s*752/i);
+  if (dp752Match) dp752Qty = parseInt(dp752Match[1]) || 1;
+
+  const dp722Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?\s*inal[aá]mbricos?|inal[aá]mbricos?|dp)?\s*722/i);
+  if (dp722Match) dp722Qty = parseInt(dp722Match[1]) || 1;
+
+  const gbx20Match = lower.match(/(\d+)\s*(?:botoneras?|modulo\s*extension)?\s*(?:gbx)?\s*20/i);
+  if (gbx20Match) gbx20Qty = parseInt(gbx20Match[1]) || 1;
+
+  const gxp2200Match = lower.match(/(\d+)\s*(?:botoneras?|modulo\s*extension)?\s*(?:gxp)?\s*2200/i);
+  if (gxp2200Match) gxp2200Qty = parseInt(gxp2200Match[1]) || 1;
+
   const p1625Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*1625/i);
-  if (p1625Match) gxp1625Qty = parseInt(p1625Match[1]);
+  if (p1625Match) gxp1625Qty = parseInt(p1625Match[1]) || 1;
 
   const p2130Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*2130/i);
-  if (p2130Match) gxp2130Qty = parseInt(p2130Match[1]);
+  if (p2130Match) gxp2130Qty = parseInt(p2130Match[1]) || 1;
 
   const p2160Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*2160/i);
-  if (p2160Match) gxp2160Qty = parseInt(p2160Match[1]);
+  if (p2160Match) gxp2160Qty = parseInt(p2160Match[1]) || 1;
 
   const softMatch = lower.match(/(\d+)\s*(?:softphones?|licencias?\s*webex|webex)/i);
-  if (softMatch) softphonesQty = parseInt(softMatch[1]);
+  if (softMatch) softphonesQty = parseInt(softMatch[1]) || 1;
 
-  // If no phones mentioned, allocate userCount to GXP 1625 standard phones
-  const totalSpecifiedPhones = gxp1625Qty + gxp2130Qty + gxp2160Qty + softphonesQty;
+  // If no phones mentioned, allocate userCount to standard new GRP2602 phones
+  const totalSpecifiedPhones = grp2602Qty + grp2603Qty + grp2612Qty + grp2624Qty + grp2614Qty + grp2616Qty + gxp2140Qty + grp2615Qty + dp722Qty + gxp1625Qty + gxp2130Qty + gxp2160Qty + softphonesQty;
   if (totalSpecifiedPhones === 0) {
-    gxp1625Qty = userCount;
+    grp2602Qty = userCount;
   }
 
-  const totalIpPhones = gxp1625Qty + gxp2130Qty + gxp2160Qty;
+  const totalIpPhones = grp2602Qty + grp2603Qty + grp2612Qty + grp2624Qty + grp2614Qty + grp2616Qty + gxp2140Qty + grp2615Qty + dp722Qty + gxp1625Qty + gxp2130Qty + gxp2160Qty;
 
   // 6. Detect Optional & Advanced Services
   const hasGroundSystem = lower.includes('tierra') || lower.includes('sistema de tierra') || lower.includes('puesta a tierra') || lower.includes('ground');
@@ -405,6 +533,46 @@ export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Cla
     if (sw24Qty > 0) {
       selectedEquipmentRental.push({ partNumber: 'HPMSWC24', description: 'Renta Switch de 24 Puertos PoE', price: 1535.00, qty: sw24Qty });
     }
+
+    // New Models
+    if (grp2602Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGRP2602', description: 'Teléfono Grandstream GRP2602', price: 190.00, qty: grp2602Qty });
+    }
+    if (grp2603Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGRP2603', description: 'Teléfono Grandstream GRP2603', price: 220.00, qty: grp2603Qty });
+    }
+    if (grp2612Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGRP2612', description: 'Teléfono Grandstream GRP2612', price: 320.00, qty: grp2612Qty });
+    }
+    if (grp2624Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGRP2624', description: 'Teléfono Grandstream GRP2624', price: 365.00, qty: grp2624Qty });
+    }
+    if (grp2614Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGRP2614', description: 'Teléfono Grandstream GRP2614', price: 460.00, qty: grp2614Qty });
+    }
+    if (grp2616Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGRP2616', description: 'Teléfono Grandstream GRP2616', price: 795.00, qty: grp2616Qty });
+    }
+    if (gxp2140Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGXP2140', description: 'Teléfono Grandstream GXP2140', price: 830.00, qty: gxp2140Qty });
+    }
+    if (grp2615Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HGRP2615', description: 'Teléfono Grandstream GRP2615', price: 1275.00, qty: grp2615Qty });
+    }
+    if (dp752Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'BHDP752', description: 'Base Grandstream DP752', price: 270.00, qty: dp752Qty });
+    }
+    if (dp722Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'BHDP722', description: 'Tel Inalambrico Grandstream DP722', price: 285.00, qty: dp722Qty });
+    }
+    if (gbx20Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'HBTGBX20', description: 'Botonera Grandstream GBX20', price: 895.00, qty: gbx20Qty });
+    }
+    if (gxp2200Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'BGP2200', description: 'Botonera GXP2200 EXT', price: 765.00, qty: gxp2200Qty });
+    }
+
+    // Traditional Models
     if (gxp1625Qty > 0) {
       selectedEquipmentRental.push({ partNumber: 'HGXP1625', description: 'Renta Teléfono GXP 1625 (2 Líneas)', price: 137.00, qty: gxp1625Qty });
     }
@@ -466,6 +634,46 @@ export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Cla
     if (sw24Qty > 0) {
       selectedEquipmentRental.push({ partNumber: 'HPCPESW2', description: 'Renta Switch de 24 Puertos PoE', price: 1535.00, qty: sw24Qty });
     }
+
+    // Corporativo - New Models
+    if (grp2602Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GRP260201', description: '1 Tel GrandS GRP2602', price: 190.00, qty: grp2602Qty });
+    }
+    if (grp2603Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GRP260301', description: '1 Tel GrandS GRP2603', price: 220.00, qty: grp2603Qty });
+    }
+    if (grp2612Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GRP261201', description: '1 Tel GrandS GRP2612', price: 320.00, qty: grp2612Qty });
+    }
+    if (grp2624Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GRP262401', description: '1 Tel GrandS GRP2624', price: 365.00, qty: grp2624Qty });
+    }
+    if (grp2614Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GRP261401', description: '1 Tel GrandS GRP2614', price: 460.00, qty: grp2614Qty });
+    }
+    if (grp2616Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GRP261601', description: '1 Tel GrandS GRP2616', price: 795.00, qty: grp2616Qty });
+    }
+    if (gxp2140Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GXP214001', description: '1 Tel GrandS GXP2140', price: 830.00, qty: gxp2140Qty });
+    }
+    if (grp2615Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'GRP261501', description: '1 Tel GrandS GRP2615', price: 1275.00, qty: grp2615Qty });
+    }
+    if (dp752Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'DP75201', description: '1 Base GrandS DP752', price: 270.00, qty: dp752Qty });
+    }
+    if (dp722Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'DP72201', description: '1 Tel Inalambrico DP722', price: 285.00, qty: dp722Qty });
+    }
+    if (gbx20Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'BGBX2001', description: '1 Boto GrandS GBX20', price: 895.00, qty: gbx20Qty });
+    }
+    if (gxp2200Qty > 0) {
+      selectedEquipmentRental.push({ partNumber: 'BGXP22001', description: '1 Boto GXP2200 EXT', price: 765.00, qty: gxp2200Qty });
+    }
+
+    // Corporativo - Traditional Models
     if (gxp1625Qty > 0) {
       selectedEquipmentRental.push({ partNumber: 'GSX162501', description: 'Renta Teléfono GXP 1625 (2 Líneas)', price: 137.00, qty: gxp1625Qty });
     }
