@@ -370,9 +370,40 @@ export function formatQuoteToMarkdown(quote) {
 }
 
 /**
+ * Helper para extraer nombre de cliente de una frase
+ */
+export function extractClientNameFromText(text) {
+  if (!text) return null;
+  const clean = text.trim();
+  const lower = clean.toLowerCase();
+
+  // Exclusion keywords
+  const stopWords = ['una hpbx', 'hpbx', 'cotizame', 'cotizar', 'un switch', 'switch', 'telefonos', 'usuarios', 'centralita', 'servidor', 'cloud', 'con', 'para'];
+
+  // Match patterns like "para [Cliente]", "cliente [Cliente]", "empresa [Cliente]"
+  const match = clean.match(/(?:(?:para\s+(?:el|la|mi|un|una)?\s*(?:cliente|empresa)?)|(?:cliente|empresa))\s+([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\.\-_&' ]+?)(?:,|\.|\n|\bcon\b|\bpara\b|\bde\s+\d+|\b\d+\s*usuarios?|$)/i);
+  
+  if (match && match[1]) {
+    const candidate = match[1].trim();
+    const candLower = candidate.toLowerCase();
+    const isStop = stopWords.some(sw => candLower === sw || candLower.startsWith(sw + ' '));
+    if (!isStop && candidate.length >= 2) {
+      return candidate;
+    }
+  }
+
+  // If text is short and just looks like a company name (e.g. "Banco BHD", "Pinturas Tropical", "Farmacia Carol")
+  if (clean.length >= 2 && clean.length <= 40 && !clean.includes('\n') && !lower.includes('cotiz') && !lower.includes('usuario') && !lower.includes('switch') && !lower.includes('hpbx')) {
+    return clean;
+  }
+
+  return null;
+}
+
+/**
  * Parsea lenguaje natural y genera una cotización completa de HPBX
  */
-export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Claro Negocios)') {
+export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Claro Negocios)', overrideClientName = null) {
   const lower = (text || '').toLowerCase();
   
   // 1. Model detection
@@ -380,14 +411,9 @@ export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Cla
   const isExplicitPymes = lower.includes('pyme') || lower.includes('pymes');
   
   // 2. Customer name
-  let clientName = 'Cliente Solicitante';
-  const clientMatch = text.match(/(?:cliente|para(?:\sel)?\s(?:cliente)?)\s+([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\.\-_ ]+?)(?:,|\.|\n|con|\d+\s*usuario|$)/i);
-  if (clientMatch && clientMatch[1]) {
-    const candidate = clientMatch[1].trim();
-    if (candidate.length > 1 && !candidate.toLowerCase().startsWith('una hpbx') && !candidate.toLowerCase().startsWith('hpbx')) {
-      clientName = candidate;
-    }
-  }
+  const detectedClient = overrideClientName || extractClientNameFromText(text);
+  const hasClientName = !!detectedClient;
+  const clientName = detectedClient || 'Cliente Solicitante';
 
   // 3. User count
   let userCount = 0;
@@ -410,13 +436,14 @@ export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Cla
   // 4. Equipment - Switches
   let sw8Qty = 0;
   let sw24Qty = 0;
-  const sw8Match = lower.match(/(\d+)?\s*switch(?:es)?\s*(?:cisco\s*)?(?:poe\s*)?(?:de\s*)?8\s*(?:puertos?|pto)?/i) ||
-                   lower.match(/switch(?:es)?\s*(?:cisco\s*)?(?:poe\s*)?(?:de\s*)?8\s*(?:puertos?|pto)?/i);
+  const sw8Match = lower.match(/(\d+)\s*switch(?:es)?\s*(?:cisco\s*)?(?:poe\s*)?(?:de\s*)?8\s*(?:puertos?|pto)/i) ||
+                   lower.match(/switch(?:es)?\s*(?:cisco\s*)?(?:poe\s*)?(?:de\s*)?8\s*(?:puertos?|pto)/i);
   if (sw8Match) {
     sw8Qty = sw8Match[1] ? parseInt(sw8Match[1]) : 1;
   }
 
-  const sw24Match = lower.match(/(\d+)?\s*switch(?:es)?\s*(?:cisco\s*)?(?:poe\s*)?(?:de\s*)?24\s*(?:puertos?|pto)?/i);
+  const sw24Match = lower.match(/(\d+)\s*switch(?:es)?\s*(?:cisco\s*)?(?:poe\s*)?(?:de\s*)?24\s*(?:puertos?|pto)?/i) ||
+                    lower.match(/switch(?:es)?\s*(?:cisco\s*)?(?:poe\s*)?(?:de\s*)?24\s*(?:puertos?|pto)?/i);
   if (sw24Match) {
     sw24Qty = sw24Match[1] ? parseInt(sw24Match[1]) : 1;
   }
@@ -440,58 +467,84 @@ export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Cla
   let gxp2160Qty = 0;
   let softphonesQty = 0;
 
-  const p2602Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2602/i);
-  if (p2602Match) grp2602Qty = parseInt(p2602Match[1]) || 1;
+  // Extract quantities if explicitly specified with numbers
+  const p2602Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp\s*)?2602\b/i);
+  if (p2602Match && p2602Match[1]) grp2602Qty = parseInt(p2602Match[1]);
 
-  const p2603Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2603/i);
-  if (p2603Match) grp2603Qty = parseInt(p2603Match[1]) || 1;
+  const p2603Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp\s*)?2603\b/i);
+  if (p2603Match && p2603Match[1]) grp2603Qty = parseInt(p2603Match[1]);
 
-  const p2612Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2612/i);
-  if (p2612Match) grp2612Qty = parseInt(p2612Match[1]) || 1;
+  const p2612Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp\s*)?2612\b/i);
+  if (p2612Match && p2612Match[1]) grp2612Qty = parseInt(p2612Match[1]);
 
-  const p2624Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2624/i);
-  if (p2624Match) grp2624Qty = parseInt(p2624Match[1]) || 1;
+  const p2624Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp\s*)?2624\b/i);
+  if (p2624Match && p2624Match[1]) grp2624Qty = parseInt(p2624Match[1]);
 
-  const p2614Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2614/i);
-  if (p2614Match) grp2614Qty = parseInt(p2614Match[1]) || 1;
+  const p2614Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp\s*)?2614\b/i);
+  if (p2614Match && p2614Match[1]) grp2614Qty = parseInt(p2614Match[1]);
 
-  const p2616Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2616/i);
-  if (p2616Match) grp2616Qty = parseInt(p2616Match[1]) || 1;
+  const p2616Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp\s*)?2616\b/i);
+  if (p2616Match && p2616Match[1]) grp2616Qty = parseInt(p2616Match[1]);
 
-  const p2140Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*2140/i);
-  if (p2140Match) gxp2140Qty = parseInt(p2140Match[1]) || 1;
+  const p2140Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp\s*)?2140\b/i);
+  if (p2140Match && p2140Match[1]) gxp2140Qty = parseInt(p2140Match[1]);
 
-  const p2615Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp)?\s*2615/i);
-  if (p2615Match) grp2615Qty = parseInt(p2615Match[1]) || 1;
+  const p2615Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:grp\s*)?2615\b/i);
+  if (p2615Match && p2615Match[1]) grp2615Qty = parseInt(p2615Match[1]);
 
-  const dp752Match = lower.match(/(\d+)\s*(?:bases?|base)?\s*(?:dp)?\s*752/i);
-  if (dp752Match) dp752Qty = parseInt(dp752Match[1]) || 1;
+  const dp752Match = lower.match(/(\d+)\s*(?:bases?|base)?\s*(?:dp\s*)?752\b/i);
+  if (dp752Match && dp752Match[1]) dp752Qty = parseInt(dp752Match[1]);
 
-  const dp722Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?\s*inal[aá]mbricos?|inal[aá]mbricos?|dp)?\s*722/i);
-  if (dp722Match) dp722Qty = parseInt(dp722Match[1]) || 1;
+  const dp722Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?\s*inal[aá]mbricos?|inal[aá]mbricos?|dp\s*)?722\b/i);
+  if (dp722Match && dp722Match[1]) dp722Qty = parseInt(dp722Match[1]);
 
-  const gbx20Match = lower.match(/(\d+)\s*(?:botoneras?|modulo\s*extension)?\s*(?:gbx)?\s*20/i);
-  if (gbx20Match) gbx20Qty = parseInt(gbx20Match[1]) || 1;
+  // Botoneras: STRICT regex to never falsely match 2602 or 2603
+  const gbx20Match = lower.match(/(\d+)\s*(?:botoneras?|modulos?\s*(?:de\s*)?extension)\s*(?:gbx\s*20)?/i) || lower.match(/\bgbx\s*20\b/i);
+  if (gbx20Match) {
+    gbx20Qty = gbx20Match[1] ? parseInt(gbx20Match[1]) : 1;
+  }
 
-  const gxp2200Match = lower.match(/(\d+)\s*(?:botoneras?|modulo\s*extension)?\s*(?:gxp)?\s*2200/i);
-  if (gxp2200Match) gxp2200Qty = parseInt(gxp2200Match[1]) || 1;
+  const gxp2200Match = lower.match(/(\d+)\s*(?:botoneras?|modulos?\s*(?:de\s*)?extension)\s*(?:gxp\s*2200)?/i) || lower.match(/\bgxp\s*2200\b/i);
+  if (gxp2200Match) {
+    gxp2200Qty = gxp2200Match[1] ? parseInt(gxp2200Match[1]) : 1;
+  }
 
-  const p1625Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*1625/i);
-  if (p1625Match) gxp1625Qty = parseInt(p1625Match[1]) || 1;
+  const p1625Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp\s*)?1625\b/i);
+  if (p1625Match && p1625Match[1]) gxp1625Qty = parseInt(p1625Match[1]);
 
-  const p2130Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*2130/i);
-  if (p2130Match) gxp2130Qty = parseInt(p2130Match[1]) || 1;
+  const p2130Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp\s*)?2130\b/i);
+  if (p2130Match && p2130Match[1]) gxp2130Qty = parseInt(p2130Match[1]);
 
-  const p2160Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp)?\s*2160/i);
-  if (p2160Match) gxp2160Qty = parseInt(p2160Match[1]) || 1;
+  const p2160Match = lower.match(/(\d+)\s*(?:tel[ée]fonos?|terminales?|equipos?)?\s*(?:gxp\s*)?2160\b/i);
+  if (p2160Match && p2160Match[1]) gxp2160Qty = parseInt(p2160Match[1]);
 
   const softMatch = lower.match(/(\d+)\s*(?:softphones?|licencias?\s*webex|webex)/i);
-  if (softMatch) softphonesQty = parseInt(softMatch[1]) || 1;
+  if (softMatch && softMatch[1]) softphonesQty = parseInt(softMatch[1]);
 
-  // If no phones mentioned, allocate userCount to standard new GRP2602 phones
-  const totalSpecifiedPhones = grp2602Qty + grp2603Qty + grp2612Qty + grp2624Qty + grp2614Qty + grp2616Qty + gxp2140Qty + grp2615Qty + dp722Qty + gxp1625Qty + gxp2130Qty + gxp2160Qty + softphonesQty;
-  if (totalSpecifiedPhones === 0) {
-    grp2602Qty = userCount;
+  // Handle distribution if multiple phone models were mentioned without individual quantities
+  const totalAssignedExplicitly = grp2602Qty + grp2603Qty + grp2612Qty + grp2624Qty + grp2614Qty + grp2616Qty + gxp2140Qty + grp2615Qty + dp722Qty + gxp1625Qty + gxp2130Qty + gxp2160Qty + softphonesQty;
+  
+  if (totalAssignedExplicitly === 0) {
+    const mentionedModels = [];
+    if (lower.includes('2602')) mentionedModels.push((q) => grp2602Qty = q);
+    if (lower.includes('2603')) mentionedModels.push((q) => grp2603Qty = q);
+    if (lower.includes('2612')) mentionedModels.push((q) => grp2612Qty = q);
+    if (lower.includes('2624')) mentionedModels.push((q) => grp2624Qty = q);
+    if (lower.includes('2614')) mentionedModels.push((q) => grp2614Qty = q);
+    if (lower.includes('2616')) mentionedModels.push((q) => grp2616Qty = q);
+    if (lower.includes('2140')) mentionedModels.push((q) => gxp2140Qty = q);
+    if (lower.includes('2615')) mentionedModels.push((q) => grp2615Qty = q);
+    if (lower.includes('722')) mentionedModels.push((q) => dp722Qty = q);
+
+    if (mentionedModels.length > 0) {
+      const perModel = Math.floor(userCount / mentionedModels.length);
+      const remainder = userCount % mentionedModels.length;
+      mentionedModels.forEach((setter, idx) => {
+        setter(perModel + (idx === 0 ? remainder : 0));
+      });
+    } else {
+      grp2602Qty = userCount;
+    }
   }
 
   const totalIpPhones = grp2602Qty + grp2603Qty + grp2612Qty + grp2624Qty + grp2614Qty + grp2616Qty + gxp2140Qty + grp2615Qty + dp722Qty + gxp1625Qty + gxp2130Qty + gxp2160Qty;
@@ -727,6 +780,6 @@ export function parseAndGenerateHPBXFromText(text, salesRep = 'Brian Quiroz (Cla
     setupFee: `$${quote.summary.totalInst.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RD$ (con imp.)`
   };
 
-  return { quote, markdown, quoteData };
+  return { quote, markdown, quoteData, hasClientName, clientName };
 }
 

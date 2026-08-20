@@ -4,7 +4,7 @@ import confetti from 'canvas-confetti';
 import { productsData } from '../data/claroProducts';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { parseAndGenerateHPBXFromText } from '../utils/hpbxQuotationModel';
+import { parseAndGenerateHPBXFromText, extractClientNameFromText } from '../utils/hpbxQuotationModel';
 import OfficialQuoteModal from './OfficialQuoteModal';
 import { exportQuoteToExcel } from '../utils/exportQuoteToExcel';
 
@@ -36,6 +36,7 @@ export default function ClaroCopilot({
   openaiModel = 'gpt-3.5-turbo',
   mode = 'floating' // 'floating' or 'embedded'
 }) {
+  const [pendingQuoteDraft, setPendingQuoteDraft] = useState(null);
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
@@ -286,31 +287,45 @@ Tu tono es profesional, entusiasta, servicial y corporativo. Responde siempre en
 Tienes información detallada del catálogo de Claro Negocios:
 ${JSON.stringify(productsData, null, 2)}
 
-Tu tarea es responder dudas de productos de Claro. Si el cliente pide cotizar un producto, por ejemplo: "hazme una cotización de HPBX de 15 usuarios", debes calcular el total mensual y además incluir al final de tu respuesta un bloque JSON estructurado encerrado entre :::QUOTE_DATA::: y :::END_QUOTE_DATA::: para que la aplicación renderice una tarjeta de cotización visual de manera nativa.
+REGLA CRÍTICA SOBRE CLIENTES:
+1. Si el cliente pide cotizar un producto (HPBX, Cloud, Móvil) pero NO ha indicado el nombre de su cliente o empresa (por ejemplo: "cotizame una hpbx de 8 usuarios con switch..."), NO debes inventar un nombre ni asignarlo como 'Cliente Solicitante'. En su lugar, confirma amablemente los requerimientos técnicos y pregúntale: "¿A nombre de qué cliente o empresa emitimos esta cotización formal para crear su expediente comercial?".
+2. Cuando el usuario te proporcione el nombre del cliente o si ya venía en el mensaje inicial (por ejemplo: "para Banco Popular"), genera la propuesta formal completa y coloca al final de tu respuesta el bloque JSON estructurado encerrado entre :::QUOTE_DATA::: y :::END_QUOTE_DATA::: para que la aplicación renderice la tarjeta de cotización nativa.
 
 Formato del bloque de cotización (si aplica):
 :::QUOTE_DATA:::
 {
+  "clientName": "Nombre del Cliente",
   "productId": "hpbx|cloud-server|plan-movil|internet-dedicado|sd-wan",
   "productName": "Nombre oficial del producto",
   "quantity": 15,
   "unitPrice": "$15 USD",
   "monthlyTotal": "$225 USD",
-  "setupFee": "$0 USD (Sujeto a contrato de 24 meses)"
+  "setupFee": "$0 USD"
 }
-:::END_QUOTE_DATA:::
-
-Ejemplo de cálculo para HPBX: Cantidad * $15 USD.
-Ejemplo de cálculo para Planes Móviles: Cantidad * $990 DOP (o plan seleccionado).
-Si no hay cantidad especificada, asume 1 unidad o pregunta al usuario.
-Calcula los totales correctamente. No incluyas impuestos en el total (indica en texto que los impuestos de ley de RD aplican: ITBIS 18%, CDT 2%, ISC 10%).`;
+:::END_QUOTE_DATA:::`;
 
       let hpbxContext = "";
       const lower = userMsgText.toLowerCase();
-      if (lower.includes('hpbx') || lower.includes('centralita') || lower.includes('telefon') || lower.includes('planta') || lower.includes('cotiz')) {
+      
+      let effectiveMsg = userMsgText;
+      let overrideClient = null;
+
+      if (pendingQuoteDraft) {
+        overrideClient = extractClientNameFromText(userMsgText) || userMsgText.trim();
+        effectiveMsg = pendingQuoteDraft.rawPrompt;
+      }
+
+      if (lower.includes('hpbx') || lower.includes('centralita') || lower.includes('telefon') || lower.includes('planta') || lower.includes('cotiz') || pendingQuoteDraft) {
         try {
-          const hpbxParsed = parseAndGenerateHPBXFromText(userMsgText);
-          hpbxContext = `\n\n[COTIZADOR OFICIAL CLARO HPBX]: Si el usuario solicita una cotización de Hosted PBX, debes utilizar obligatoriamente este resultado estructurado oficial con el formato exacto de Claro Dominicana:\n\n${hpbxParsed.markdown}\n\n:::QUOTE_DATA:::\n${JSON.stringify(hpbxParsed.quoteData, null, 2)}\n:::END_QUOTE_DATA:::`;
+          const hpbxParsed = parseAndGenerateHPBXFromText(effectiveMsg, 'Brian Quiroz (Claro Negocios)', overrideClient);
+          
+          if (!hpbxParsed.hasClientName && !pendingQuoteDraft) {
+            setPendingQuoteDraft({ type: 'hpbx', rawPrompt: userMsgText, parsed: hpbxParsed });
+            hpbxContext = `\n\n[INSTRUCCIÓN OBLIGATORIA]: El usuario solicitó cotizar Hosted PBX pero NO indicó el nombre del cliente. Confirma los parámetros técnicos calculados (${hpbxParsed.quote.customer.activeUsers} usuarios, equipos, etc.) y pregúntale de forma amable: "¿A nombre de qué cliente o empresa emitimos esta cotización formal para crear su expediente comercial?". NO agregues el bloque :::QUOTE_DATA::: todavía.`;
+          } else {
+            setPendingQuoteDraft(null);
+            hpbxContext = `\n\n[COTIZADOR OFICIAL CLARO HPBX]: Emite la propuesta formal oficial para el cliente "${hpbxParsed.clientName}":\n\n${hpbxParsed.markdown}\n\n:::QUOTE_DATA:::\n${JSON.stringify({ ...hpbxParsed.quoteData, clientName: hpbxParsed.clientName }, null, 2)}\n:::END_QUOTE_DATA:::`;
+          }
         } catch (e) {}
       }
 
@@ -367,8 +382,13 @@ Calcula los totales correctamente. No incluyas impuestos en el total (indica en 
     let quoteObj = null;
     if (cleanText.includes('HOSTED PBX') || cleanText.includes('HPBX') || cleanText.includes('Propuesta Comercial')) {
       try {
-        const parsed = parseAndGenerateHPBXFromText(cleanText);
+        const clientName = quoteData?.clientName || extractClientNameFromText(cleanText) || null;
+        const parsed = parseAndGenerateHPBXFromText(cleanText, 'Brian Quiroz (Claro Negocios)', clientName);
         quoteObj = parsed.quote;
+        if (!quoteData && parsed.quoteData) {
+          quoteData = { ...parsed.quoteData, clientName: parsed.clientName };
+          triggerConfetti();
+        }
       } catch (e) {
         // ignore
       }
@@ -395,30 +415,85 @@ Calcula los totales correctamente. No incluyas impuestos en el total (indica en 
     let quoteData = null;
     let quoteObj = null;
 
-    if (text.includes('hpbx') || text.includes('telefon') || text.includes('centralita') || text.includes('planta') || text.includes('gxp') || text.includes('audiocodes') || text.includes('pyme') || text.includes('corporativ')) {
+    // 0. Check if we have a pending quote draft waiting for client name
+    if (pendingQuoteDraft) {
+      const clientName = extractClientNameFromText(userText) || userText.trim();
+      if (clientName && clientName.length >= 2) {
+        if (pendingQuoteDraft.type === 'hpbx') {
+          const hpbxResult = parseAndGenerateHPBXFromText(pendingQuoteDraft.rawPrompt, 'Brian Quiroz (Claro Negocios)', clientName);
+          reply = `¡Perfecto! He generado la propuesta formal oficial para **${clientName}** bajo el modelo de **Claro Hosted PBX (${hpbxResult.quote.type})** y creado su carpeta de expediente comercial:\n\n${hpbxResult.markdown}`;
+          quoteData = { ...hpbxResult.quoteData, clientName: clientName };
+          quoteObj = hpbxResult.quote;
+          triggerConfetti();
+          setPendingQuoteDraft(null);
+        } else if (pendingQuoteDraft.type === 'cloud') {
+          reply = `¡Listo! He registrado la cotización de **Claro Cloud Server** para **${clientName}** y creado su carpeta de expediente comercial:`;
+          quoteData = {
+            ...pendingQuoteDraft.quoteData,
+            clientName: clientName
+          };
+          triggerConfetti();
+          setPendingQuoteDraft(null);
+        } else if (pendingQuoteDraft.type === 'movil') {
+          reply = `¡Excelente! He generado la propuesta de **Planes Móviles Negocios 5G** para **${clientName}**:`;
+          quoteData = {
+            ...pendingQuoteDraft.quoteData,
+            clientName: clientName
+          };
+          triggerConfetti();
+          setPendingQuoteDraft(null);
+        }
+      }
+    }
+    // 1. HPBX Quoting flow
+    else if (text.includes('hpbx') || text.includes('telefon') || text.includes('centralita') || text.includes('planta') || text.includes('gxp') || text.includes('audiocodes') || text.includes('pyme') || text.includes('corporativ')) {
       if (text.includes('cotiza') || text.includes('precio') || text.includes('cuanto') || text.includes('costo') || text.includes('usuario') || text.includes('cliente') || text.includes('para')) {
         const hpbxResult = parseAndGenerateHPBXFromText(userText);
-        reply = `¡Con gusto! He generado la propuesta formal bajo el formato oficial de **Claro Hosted PBX (${hpbxResult.quote.type})**:\n\n${hpbxResult.markdown}`;
-        quoteData = hpbxResult.quoteData;
-        quoteObj = hpbxResult.quote;
-        triggerConfetti();
+        
+        if (!hpbxResult.hasClientName) {
+          // Ask for client name before issuing quote
+          setPendingQuoteDraft({ type: 'hpbx', rawPrompt: userText, parsed: hpbxResult });
+          reply = `¡Excelente! Tengo configurada la propuesta técnica de tu **Hosted PBX Claro (${hpbxResult.quote.type})** para **${hpbxResult.quote.customer.activeUsers} usuarios** con sus terminales y equipamiento correspondiente. 📋\n\n¿A nombre de **qué cliente o empresa** emitimos esta cotización formal para crear su expediente comercial y propuesta oficial?`;
+        } else {
+          reply = `¡Con gusto! He generado la propuesta formal oficial para **${hpbxResult.clientName}** bajo el formato corporativo de **Claro Hosted PBX (${hpbxResult.quote.type})**:\n\n${hpbxResult.markdown}`;
+          quoteData = { ...hpbxResult.quoteData, clientName: hpbxResult.clientName };
+          quoteObj = hpbxResult.quote;
+          triggerConfetti();
+        }
       } else {
-        reply = `La **Centralita Virtual Claro (HPBX)** reemplaza la planta telefónica física por una solución en la nube con extensiones móviles, IVR interactivo y colas de atención. \n\nDisponemos de modelos **PYMES** (base 3 usuarios) y **CORPORATIVO** (base 8 usuarios). ¿Para cuántos usuarios deseas que elaboremos tu cotización?`;
+        reply = `La **Centralita Virtual Claro (HPBX)** reemplaza la planta telefónica física por una solución en la nube con extensiones móviles, IVR interactivo y colas de atención. \n\nDisponemos de modelos **PYMES** (base 3 usuarios) y **CORPORATIVO** (base 8 usuarios). ¿Para cuántos usuarios y qué cliente deseas que elaboremos tu cotización?`;
       }
     } 
     else if (text.includes('cloud') || text.includes('servidor') || text.includes('vps')) {
       if (text.includes('cotiza') || text.includes('precio') || text.includes('cuanto')) {
-        reply = `Perfecto. He elaborado una propuesta de **Claro Cloud Server** para tu empresa. El servidor se aprovisiona localmente en nuestro Data Center de Santo Domingo con garantía de máxima disponibilidad:`;
-        
-        quoteData = {
-          productId: 'cloud-server',
-          productName: 'Claro Cloud Server (1 vCPU, 2GB RAM, 50GB SSD)',
-          quantity: 1,
-          unitPrice: '$29.00 USD',
-          monthlyTotal: '$29.00 USD',
-          setupFee: '$0.00 USD (Aprovisionamiento Inmediato)'
-        };
-        triggerConfetti();
+        const clientName = extractClientNameFromText(userText);
+        if (!clientName) {
+          setPendingQuoteDraft({
+            type: 'cloud',
+            rawPrompt: userText,
+            quoteData: {
+              productId: 'cloud-server',
+              productName: 'Claro Cloud Server (1 vCPU, 2GB RAM, 50GB SSD)',
+              quantity: 1,
+              unitPrice: '$29.00 USD',
+              monthlyTotal: '$29.00 USD',
+              setupFee: '$0.00 USD (Aprovisionamiento Inmediato)'
+            }
+          });
+          reply = `¡Perfecto! El **Claro Cloud Server (1 vCPU, 2GB RAM, 50GB SSD)** en nuestro Data Center local está listo para cotizar a **$29.00 USD/mes**.\n\n¿A nombre de **qué cliente o empresa** emitimos esta propuesta formal?`;
+        } else {
+          reply = `Perfecto. He elaborado una propuesta de **Claro Cloud Server** para **${clientName}**. El servidor se aprovisiona localmente en nuestro Data Center de Santo Domingo con garantía de máxima disponibilidad:`;
+          quoteData = {
+            clientName: clientName,
+            productId: 'cloud-server',
+            productName: 'Claro Cloud Server (1 vCPU, 2GB RAM, 50GB SSD)',
+            quantity: 1,
+            unitPrice: '$29.00 USD',
+            monthlyTotal: '$29.00 USD',
+            setupFee: '$0.00 USD (Aprovisionamiento Inmediato)'
+          };
+          triggerConfetti();
+        }
       } else {
         reply = `**Claro Cloud Server** ofrece servidores virtuales en nuestro Data Center local en República Dominicana, garantizando latencias mínimas y cumplimiento normativo. Planes desde **$29 USD/mes**.`;
       }
@@ -428,18 +503,35 @@ Calcula los totales correctamente. No incluyas impuestos en el total (indica en 
         const numbers = text.match(/\d+/);
         const qty = numbers ? parseInt(numbers[0]) : 3;
         const total = qty * 990;
+        const clientName = extractClientNameFromText(userText);
         
-        reply = `Excelente. He preparado la cotización para **${qty} líneas** del Plan Claro Móvil Negocios Emprendedor 5G (RD$990 DOP/mes por línea), con minutos ilimitados a la red Claro.`;
-        
-        quoteData = {
-          productId: 'plan-movil',
-          productName: 'Plan Claro Móvil Negocios Emprendedor 5G',
-          quantity: qty,
-          unitPrice: '$990.00 DOP',
-          monthlyTotal: `$${total.toLocaleString('es-DO')} DOP`,
-          setupFee: '$0.00 DOP (Chip SIM gratis)'
-        };
-        triggerConfetti();
+        if (!clientName) {
+          setPendingQuoteDraft({
+            type: 'movil',
+            rawPrompt: userText,
+            quoteData: {
+              productId: 'plan-movil',
+              productName: 'Plan Claro Móvil Negocios Emprendedor 5G',
+              quantity: qty,
+              unitPrice: '$990.00 DOP',
+              monthlyTotal: `$${total.toLocaleString('es-DO')} DOP`,
+              setupFee: '$0.00 DOP (Chip SIM gratis)'
+            }
+          });
+          reply = `Excelente. Tengo lista la cotización para **${qty} líneas** del Plan Claro Móvil Negocios 5G (RD$990 DOP/mes por línea).\n\n¿A nombre de **qué cliente o empresa** emitimos la cotización?`;
+        } else {
+          reply = `Excelente. He preparado la cotización para **${clientName}** con **${qty} líneas** del Plan Claro Móvil Negocios Emprendedor 5G (RD$990 DOP/mes por línea), con minutos ilimitados a la red Claro.`;
+          quoteData = {
+            clientName: clientName,
+            productId: 'plan-movil',
+            productName: 'Plan Claro Móvil Negocios Emprendedor 5G',
+            quantity: qty,
+            unitPrice: '$990.00 DOP',
+            monthlyTotal: `$${total.toLocaleString('es-DO')} DOP`,
+            setupFee: '$0.00 DOP (Chip SIM gratis)'
+          };
+          triggerConfetti();
+        }
       } else {
         reply = `Nuestros **Planes Móviles Negocios 5G** le otorgan minutos libres, gigas de alta velocidad y Roaming Sin Fronteras en EE.UU. y Latinoamérica. Entradas desde **RD$990 DOP al mes**.`;
       }
