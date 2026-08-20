@@ -4,7 +4,8 @@ import fs from 'fs'
 import path from 'path'
 import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
-import { getMessages, saveMessage, clearMessages, getQuotes, clearAllQuotes, deleteQuote, deleteClientFolder, getClientFolders, getCommercialDocuments, saveCommercialDocument, bulkSaveCommercialDocuments } from './db.js'
+import { getMessages, saveMessage, clearMessages, getQuotes, clearAllQuotes, deleteQuote, deleteClientFolder, getClientFolders, getCommercialDocuments, saveCommercialDocument, bulkSaveCommercialDocuments, searchCommercialDocuments } from './db.js'
+import { parseAndGenerateHPBXFromText, extractClientNameFromText } from './src/utils/hpbxQuotationModel.js'
 import mammoth from 'mammoth'
 import XLSX from 'xlsx'
 
@@ -237,6 +238,112 @@ export default defineConfig({
               const allDocs = await getCommercialDocuments();
               res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
               res.end(JSON.stringify({ status: 'success', syncedCount: allDocs.length, documents: allDocs }));
+            } catch (err) {
+              res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+              res.end(JSON.stringify({ error: err.message }));
+            }
+            return;
+          }
+
+          // POST /api/ai/chat - Enterprise AI Copilot with RAG & Multi-Turn Quoting
+          if (req.url.startsWith('/api/ai/chat') && req.method === 'POST') {
+            try {
+              const body = await readJsonBody(req);
+              const { messages = [], userMsgText = '', model = 'gpt-4o-mini', apiKey, lastQuoteObj } = body;
+              const effectiveKey = apiKey || process.env.OPENAI_API_KEY;
+
+              // 1. Search for relevant RAG documents from PostgreSQL
+              let ragDocs = [];
+              try {
+                ragDocs = await searchCommercialDocuments(userMsgText, 4);
+              } catch (e) {
+                console.error("RAG search error:", e.message);
+              }
+
+              // 2. Format RAG context
+              let ragContextText = "";
+              if (ragDocs && ragDocs.length > 0) {
+                ragContextText = "\n\n[DOCUMENTOS COMERCIALES Y FICHAS TÉCNICAS RELEVANTES DE SHAREPOINT/ONEDRIVE]:\n" + 
+                  ragDocs.map((d, idx) => `Documento ${idx+1}: "${d.title || d.name}" (Categoría: ${d.category})\nResumen: ${d.aiSummary || d.contentPreview?.slice(0, 300)}`).join('\n\n');
+              }
+
+              // 3. Check for HPBX quoting intent
+              const lower = (userMsgText || '').toLowerCase();
+              let hpbxParsed = null;
+              let hpbxContext = "";
+
+              if (lower.includes('hpbx') || lower.includes('centralita') || lower.includes('telefon') || lower.includes('planta') || lower.includes('cotiz')) {
+                try {
+                  hpbxParsed = parseAndGenerateHPBXFromText(userMsgText, 'Brian Quiroz (Claro Negocios)');
+                  if (!hpbxParsed.hasClientName) {
+                    hpbxContext = `\n\n[REGLA DE NEGOCIO OBLIGATORIA]: El usuario solicitó cotizar pero NO especificó el nombre del cliente o empresa. Confirma los parámetros técnicos detectados (${hpbxParsed.quote.customer.activeUsers} usuarios, equipos) y pregúntale amablemente: "¿A nombre de qué cliente o empresa emitimos esta cotización formal para crear su expediente comercial?". NO incluyas el bloque :::QUOTE_DATA::: todavía.`;
+                  } else {
+                    hpbxContext = `\n\n[COTIZADOR OFICIAL CLARO HPBX]: Utiliza obligatoriamente esta propuesta oficial calculada para el cliente "${hpbxParsed.clientName}":\n\n${hpbxParsed.markdown}\n\n:::QUOTE_DATA:::\n${JSON.stringify({ ...hpbxParsed.quoteData, clientName: hpbxParsed.clientName }, null, 2)}\n:::END_QUOTE_DATA:::`;
+                  }
+                } catch (e) {}
+              }
+
+              // 4. If we have OpenAI key, call OpenAI
+              if (effectiveKey && effectiveKey.startsWith('sk-')) {
+                const systemPrompt = `Eres Clara, la consultora comercial y asesora ejecutiva de Inteligencia Artificial para Claro Dominicana (Soluciones Corporativas y Negocios B2B).
+Tu tono es ejecutivo, cordial, altamente técnico y comercialmente persuasivo. Respondes siempre en español de República Dominicana.
+
+REGLAS DE ATENCIÓN Y COTIZACIÓN:
+1. Si el cliente pide cotizar pero NO indica el nombre de su empresa o cliente, confirma la configuración técnica y solicita el nombre del cliente para crear su expediente comercial.
+2. Cuando se proporcione el cliente, genera la propuesta estructurada con precios oficiales de Claro Dominicana e incluye al final el bloque :::QUOTE_DATA::: {...} :::END_QUOTE_DATA:::.
+3. Si el usuario hace preguntas sobre normativas (como Facturación Electrónica DGII Ley 32-23, SLA de conectividad, IaaS de Claro Cloud, Ciberseguridad SASE/SOC 24/7), apóyate en los documentos comerciales adjuntos para responder con precisión experta.
+4. Aplica proactivamente ventas cruzadas o valor agregado (ej: proponer Sistema de Tierra para plantas telefónicas, enlaces de respaldo para Internet Dedicado, o licencias Webex softphone para movilidad).`;
+
+                const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${effectiveKey}`
+                  },
+                  body: JSON.stringify({
+                    model: model || 'gpt-4o-mini',
+                    messages: [
+                      { role: 'system', content: systemPrompt + ragContextText + hpbxContext },
+                      ...messages.slice(-10),
+                      { role: 'user', content: userMsgText }
+                    ],
+                    temperature: 0.3
+                  })
+                });
+
+                if (openAiRes.ok) {
+                  const aiData = await openAiRes.json();
+                  const botReply = aiData.choices?.[0]?.message?.content;
+                  res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+                  res.end(JSON.stringify({
+                    text: botReply,
+                    ragDocs: ragDocs,
+                    model: model || 'gpt-4o-mini',
+                    hpbxParsed: hpbxParsed
+                  }));
+                  return;
+                }
+              }
+
+              // Fallback local engine
+              let fallbackReply = "";
+              if (hpbxParsed) {
+                if (!hpbxParsed.hasClientName) {
+                  fallbackReply = `¡Excelente! Tengo configurada la propuesta técnica de tu **Hosted PBX Claro (${hpbxParsed.quote.type})** para **${hpbxParsed.quote.customer.activeUsers} usuarios** con sus terminales y equipamiento correspondiente. 📋\n\n¿A nombre de **qué cliente o empresa** emitimos esta cotización formal para crear su expediente comercial y propuesta oficial?`;
+                } else {
+                  fallbackReply = `¡Con gusto! He generado la propuesta formal oficial para **${hpbxParsed.clientName}** bajo el formato corporativo de **Claro Hosted PBX (${hpbxParsed.quote.type})**:\n\n${hpbxParsed.markdown}\n\n:::QUOTE_DATA:::\n${JSON.stringify({ ...hpbxParsed.quoteData, clientName: hpbxParsed.clientName }, null, 2)}\n:::END_QUOTE_DATA:::`;
+                }
+              } else {
+                fallbackReply = `¡Hola! Como consultora comercial de **Claro Negocios**, puedo brindarte información técnica y cotizaciones inmediatas de Hosted PBX, Cloud Servers, Planes Móviles 5G e Internet Dedicado. ¿Qué cliente o solución deseas consultar?`;
+              }
+
+              res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+              res.end(JSON.stringify({
+                text: fallbackReply,
+                ragDocs: ragDocs,
+                model: 'local-claro-engine',
+                hpbxParsed: hpbxParsed
+              }));
             } catch (err) {
               res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
               res.end(JSON.stringify({ error: err.message }));

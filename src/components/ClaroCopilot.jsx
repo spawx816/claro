@@ -33,15 +33,16 @@ export default function ClaroCopilot({
   customAgentMode = 'openai',
   assistantId = '',
   webhookUrl = '',
-  openaiModel = 'gpt-3.5-turbo',
+  openaiModel = 'gpt-4o-mini',
   mode = 'floating' // 'floating' or 'embedded'
 }) {
   const [pendingQuoteDraft, setPendingQuoteDraft] = useState(null);
+  const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
       sender: 'bot',
-      text: '¡Hola! Soy **Clara**, tu asistente virtual ejecutiva para **Claro Negocios**. \n\n¿En qué puedo ayudarte hoy? Puedes hacer clic en cualquiera de las sugerencias rápidas abajo o pedirme directamente una cotización escribiendo algo como: *"Hazme una cotización de HPBX para 10 usuarios"*.'
+      text: '¡Hola! Soy **Clara**, tu Consultora Comercial con Inteligencia Artificial para **Claro Negocios**. 🇩🇴\n\nTengo acceso al catálogo oficial y a toda la base documental técnica de Claro Cloud, Hosted PBX, Datacenter y Facturación Electrónica DGII.\n\n¿A qué cliente o solución deseas que le elaboremos una propuesta hoy?'
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
@@ -281,88 +282,40 @@ export default function ClaroCopilot({
   const runFetchChat = async (history, userMsgText, keyToUse) => {
     const key = keyToUse || activeApiKey;
     try {
-      const systemPrompt = `Eres Clara, la asistente inteligente oficial de Claro Dominicana para Clientes Corporativos. 
-Tu tono es profesional, entusiasta, servicial y corporativo. Responde siempre en español de República Dominicana.
-
-Tienes información detallada del catálogo de Claro Negocios:
-${JSON.stringify(productsData, null, 2)}
-
-REGLA CRÍTICA SOBRE CLIENTES:
-1. Si el cliente pide cotizar un producto (HPBX, Cloud, Móvil) pero NO ha indicado el nombre de su cliente o empresa (por ejemplo: "cotizame una hpbx de 8 usuarios con switch..."), NO debes inventar un nombre ni asignarlo como 'Cliente Solicitante'. En su lugar, confirma amablemente los requerimientos técnicos y pregúntale: "¿A nombre de qué cliente o empresa emitimos esta cotización formal para crear su expediente comercial?".
-2. Cuando el usuario te proporcione el nombre del cliente o si ya venía en el mensaje inicial (por ejemplo: "para Banco Popular"), genera la propuesta formal completa y coloca al final de tu respuesta el bloque JSON estructurado encerrado entre :::QUOTE_DATA::: y :::END_QUOTE_DATA::: para que la aplicación renderice la tarjeta de cotización nativa.
-
-Formato del bloque de cotización (si aplica):
-:::QUOTE_DATA:::
-{
-  "clientName": "Nombre del Cliente",
-  "productId": "hpbx|cloud-server|plan-movil|internet-dedicado|sd-wan",
-  "productName": "Nombre oficial del producto",
-  "quantity": 15,
-  "unitPrice": "$15 USD",
-  "monthlyTotal": "$225 USD",
-  "setupFee": "$0 USD"
-}
-:::END_QUOTE_DATA:::`;
-
-      let hpbxContext = "";
-      const lower = userMsgText.toLowerCase();
-      
-      let effectiveMsg = userMsgText;
       let overrideClient = null;
-
       if (pendingQuoteDraft) {
         overrideClient = extractClientNameFromText(userMsgText) || userMsgText.trim();
-        effectiveMsg = pendingQuoteDraft.rawPrompt;
       }
 
-      if (lower.includes('hpbx') || lower.includes('centralita') || lower.includes('telefon') || lower.includes('planta') || lower.includes('cotiz') || pendingQuoteDraft) {
-        try {
-          const hpbxParsed = parseAndGenerateHPBXFromText(effectiveMsg, 'Brian Quiroz (Claro Negocios)', overrideClient);
-          
-          if (!hpbxParsed.hasClientName && !pendingQuoteDraft) {
-            setPendingQuoteDraft({ type: 'hpbx', rawPrompt: userMsgText, parsed: hpbxParsed });
-            hpbxContext = `\n\n[INSTRUCCIÓN OBLIGATORIA]: El usuario solicitó cotizar Hosted PBX pero NO indicó el nombre del cliente. Confirma los parámetros técnicos calculados (${hpbxParsed.quote.customer.activeUsers} usuarios, equipos, etc.) y pregúntale de forma amable: "¿A nombre de qué cliente o empresa emitimos esta cotización formal para crear su expediente comercial?". NO agregues el bloque :::QUOTE_DATA::: todavía.`;
-          } else {
-            setPendingQuoteDraft(null);
-            hpbxContext = `\n\n[COTIZADOR OFICIAL CLARO HPBX]: Emite la propuesta formal oficial para el cliente "${hpbxParsed.clientName}":\n\n${hpbxParsed.markdown}\n\n:::QUOTE_DATA:::\n${JSON.stringify({ ...hpbxParsed.quoteData, clientName: hpbxParsed.clientName }, null, 2)}\n:::END_QUOTE_DATA:::`;
-          }
-        } catch (e) {}
-      }
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: openaiModel || 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: systemPrompt + hpbxContext },
-            ...history,
-            { role: 'user', content: userMsgText }
-          ],
-          temperature: 0.3
+          messages: history,
+          userMsgText: userMsgText,
+          model: selectedModel || 'gpt-4o-mini',
+          apiKey: key,
+          overrideClient: overrideClient
         })
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `Error HTTP ${response.status} en la API de OpenAI.`);
+        throw new Error(`Error en servidor AI: ${response.status}`);
       }
 
       const resData = await response.json();
-      const botText = resData.choices[0].message.content;
-      processBotResponse(botText);
+      processBotResponse(resData.text, resData.ragDocs || [], resData.hpbxParsed);
     } catch (err) {
-      console.warn("OpenAI Chat completion error, falling back to local Claro engine:", err);
+      console.warn("AI Chat API error, falling back to local Claro engine:", err);
       simulateBotResponse(userMsgText);
     } finally {
       setIsTyping(false);
     }
   };
 
-  const processBotResponse = (text) => {
+  const processBotResponse = (text, ragDocs = [], hpbxParsed = null) => {
     let quoteData = null;
     let cleanText = text;
 
@@ -383,7 +336,7 @@ Formato del bloque de cotización (si aplica):
     if (cleanText.includes('HOSTED PBX') || cleanText.includes('HPBX') || cleanText.includes('Propuesta Comercial')) {
       try {
         const clientName = quoteData?.clientName || extractClientNameFromText(cleanText) || null;
-        const parsed = parseAndGenerateHPBXFromText(cleanText, 'Brian Quiroz (Claro Negocios)', clientName);
+        const parsed = hpbxParsed || parseAndGenerateHPBXFromText(cleanText, 'Brian Quiroz (Claro Negocios)', clientName);
         quoteObj = parsed.quote;
         if (!quoteData && parsed.quoteData) {
           quoteData = { ...parsed.quoteData, clientName: parsed.clientName };
@@ -399,7 +352,8 @@ Formato del bloque de cotización (si aplica):
       sender: 'bot',
       text: cleanText,
       quoteData: quoteData,
-      quoteObj: quoteObj
+      quoteObj: quoteObj,
+      ragDocs: ragDocs
     };
     setMessages(prev => [...prev, botMsgObj]);
     saveMessageToDb(botMsgObj);
@@ -646,13 +600,34 @@ Formato del bloque de cotización (si aplica):
               <span style={{ fontSize: '0.65rem', backgroundColor: 'var(--claro-red-light)', color: 'var(--claro-red)', padding: '2px 6px', borderRadius: 'var(--radius-full)', fontWeight: '700' }}>IA</span>
             </div>
             <span style={{ fontSize: '0.725rem', color: '#10B981', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Sparkles size={10} /> Cotizador Claro Negocios
+              <Sparkles size={10} /> Copilot Claro Negocios
             </span>
           </div>
         </div>
 
-        {/* Window Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        {/* Model Selector & Window Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            style={{
+              fontSize: '0.72rem',
+              padding: '4px 8px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-primary)',
+              fontWeight: '700',
+              cursor: 'pointer',
+              outline: 'none'
+            }}
+            title="Seleccionar Modelo de Inteligencia Artificial"
+          >
+            <option value="gpt-4o-mini">⚡ GPT-4o Mini</option>
+            <option value="gpt-4o">🧠 GPT-4o Omni</option>
+            <option value="gpt-3.5-turbo">🤖 GPT-3.5</option>
+          </select>
+
           <button 
             onClick={handleResetChat}
             className="btn btn-secondary" 
@@ -777,6 +752,22 @@ Formato del bloque de cotización (si aplica):
                     >
                       {msg.text}
                     </ReactMarkdown>
+
+                    {/* RAG SOURCED DOCUMENTS BADGE */}
+                    {msg.ragDocs && msg.ragDocs.length > 0 && (
+                      <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '8px', backgroundColor: 'rgba(238, 28, 36, 0.04)', border: '1px solid rgba(238, 28, 36, 0.15)', fontSize: '0.73rem', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        <span style={{ fontWeight: '700', color: 'var(--claro-red)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          📚 Fuentes Técnicas y Comerciales Consultadas ({msg.ragDocs.length}):
+                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                          {msg.ragDocs.map((doc, idx) => (
+                            <span key={idx} style={{ backgroundColor: 'var(--bg-primary)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.7rem' }} title={doc.aiSummary || doc.title}>
+                              📄 {doc.title || doc.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -807,12 +798,20 @@ Formato del bloque de cotización (si aplica):
                   }}>
                     <div>
                       <h4 style={{ fontSize: '0.9rem', fontWeight: '800', textTransform: 'uppercase', margin: 0 }}>Claro Dominicana</h4>
-                      <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>Cotización Corporativa Oficial</span>
+                      <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>
+                        {msg.quoteData.clientName ? `Expediente: Clientes/${msg.quoteData.clientName}` : 'Cotización Corporativa Oficial'}
+                      </span>
                     </div>
                     <FileText size={20} />
                   </div>
                   
                   <div style={{ padding: '14px' }}>
+                    {msg.quoteData.clientName && (
+                      <div style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '6px', backgroundColor: 'rgba(238, 28, 36, 0.08)', color: 'var(--claro-red)', fontSize: '0.75rem', fontWeight: '800', marginBottom: '8px' }}>
+                        🏢 CLIENTE: {msg.quoteData.clientName}
+                      </div>
+                    )}
+
                     <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
                       {msg.quoteData.productName}
                     </h3>
@@ -838,6 +837,32 @@ Formato del bloque de cotización (si aplica):
                         {msg.quoteData.monthlyTotal}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Refinement Quick Chips */}
+                  <div style={{ padding: '8px 14px', backgroundColor: '#FAFAFA', borderTop: '1px solid #F3F4F6', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.68rem', color: '#9CA3AF', fontWeight: '700' }}>Ajustar:</span>
+                    <button 
+                      onClick={() => handleSendSuggested(`A la cotización de ${msg.quoteData.clientName || 'la propuesta'}, agrégale un switch de 24 puertos PoE`)}
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '12px' }}
+                    >
+                      + Switch 24p PoE
+                    </button>
+                    <button 
+                      onClick={() => handleSendSuggested(`A la cotización de ${msg.quoteData.clientName || 'la propuesta'}, agrégale Sistema de Tierra`)}
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '12px' }}
+                    >
+                      + Sistema de Tierra
+                    </button>
+                    <button 
+                      onClick={() => handleSendSuggested(`Aumenta la cotización de ${msg.quoteData.clientName || 'la propuesta'} a 15 usuarios`)}
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.68rem', padding: '3px 8px', borderRadius: '12px' }}
+                    >
+                      + 15 Usuarios
+                    </button>
                   </div>
 
                   <div style={{ 

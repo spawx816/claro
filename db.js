@@ -613,6 +613,52 @@ export async function bulkSaveCommercialDocuments(docs) {
   return results;
 }
 
+export async function searchCommercialDocuments(query, limit = 5) {
+  if (!query || typeof query !== 'string' || query.trim() === '') return [];
+  const cleanTerms = query.toLowerCase().replace(/[^a-záéíóúñ0-9\s]/g, ' ').split(/\s+/).filter(t => t.length > 2 && !['para', 'con', 'las', 'los', 'una', 'uno', 'por', 'del', 'que', 'como'].includes(t));
+  if (cleanTerms.length === 0) return [];
+
+  if (isPostgresAvailable && pool) {
+    try {
+      const conditions = cleanTerms.map((_, i) => 
+        `(name ILIKE $${i+1} OR title ILIKE $${i+1} OR category ILIKE $${i+1} OR ai_summary ILIKE $${i+1} OR content_preview ILIKE $${i+1})`
+      ).join(' OR ');
+
+      const params = cleanTerms.map(t => `%${t}%`);
+      params.push(limit);
+
+      const res = await pool.query(
+        `SELECT id, name, title, folder, category, extension, size, modified_date as "modifiedDate",
+                ai_summary as "aiSummary", key_takeaways as "keyTakeaways", content_preview as "contentPreview",
+                sharepoint_url as "sharepointUrl"
+         FROM commercial_documents
+         WHERE ${conditions}
+         ORDER BY 
+           CASE 
+             WHEN name ILIKE $1 THEN 1
+             WHEN title ILIKE $1 THEN 2
+             ELSE 3
+           END
+         LIMIT $${params.length}`,
+        params
+      );
+      return res.rows.map(row => ({
+        ...row,
+        keyTakeaways: typeof row.keyTakeaways === 'string' ? JSON.parse(row.keyTakeaways) : (row.keyTakeaways || [])
+      }));
+    } catch (err) {
+      console.error("searchCommercialDocuments error:", err.message);
+    }
+  }
+
+  const all = await getCommercialDocuments();
+  return all.filter(d => {
+    const text = `${d.name || ''} ${d.title || ''} ${d.category || ''} ${d.aiSummary || ''} ${d.contentPreview || ''}`.toLowerCase();
+    return cleanTerms.some(t => text.includes(t));
+  }).slice(0, limit);
+}
+
 // Auto initialize on module load
 initDb();
+
 
