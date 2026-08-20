@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Printer, Download, X, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import { exportQuoteToExcel } from '../utils/exportQuoteToExcel';
 
-export default function OfficialQuoteModal({ quote, onClose }) {
+export default function OfficialQuoteModal({ quote, onClose, isEmbedded = false }) {
   if (!quote) return null;
 
   const f = (val) => Number(val || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -17,11 +17,11 @@ export default function OfficialQuoteModal({ quote, onClose }) {
     exportQuoteToExcel(quote);
   };
 
-  const modalContent = (
-    <div className="modal-backdrop official-quote-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-panel animate-scale-in official-quote-modal-panel" style={{ maxWidth: '850px', padding: '0', borderRadius: '16px', overflow: 'hidden' }}>
-        
-        {/* Top Control Bar (Hidden on Print) */}
+  const panelContent = (
+    <div className="official-quote-modal-panel" style={{ maxWidth: '850px', margin: isEmbedded ? '0 auto' : undefined, padding: '0', borderRadius: '16px', overflow: 'hidden', border: isEmbedded ? '1px solid var(--border-color)' : undefined }}>
+      
+      {/* Top Control Bar (Hidden on Print) */}
+      {!isEmbedded && (
         <div className="no-print" style={{ 
           backgroundColor: 'var(--bg-secondary)', 
           borderBottom: '1px solid var(--border-color)', 
@@ -73,6 +73,7 @@ export default function OfficialQuoteModal({ quote, onClose }) {
             </button>
           </div>
         </div>
+      )}
 
         {/* ============================================================ */}
         {/* OFFICIAL CLARO QUOTATION DOCUMENT SHEET (Printable Area) */}
@@ -434,6 +435,15 @@ export default function OfficialQuoteModal({ quote, onClose }) {
         </div>
 
       </div>
+  );
+
+  if (isEmbedded) {
+    return panelContent;
+  }
+
+  const modalContent = (
+    <div className="modal-backdrop official-quote-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      {panelContent}
     </div>
   );
 

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, Search, Download, Printer, RefreshCw, Filter, DollarSign, 
-  Calendar, CheckCircle2, Send, ExternalLink, Sparkles, Building, 
-  FileSpreadsheet, Folder, FolderOpen, Trash2, Users, AlertTriangle, 
-  ChevronRight, ArrowLeft, Eye, ShieldCheck, Plus, Package, ArrowUpRight,
-  TrendingUp, Clock, FileCheck, Layers, Briefcase
+  Calendar, CheckCircle2, Building, FileSpreadsheet, Folder, Trash2, 
+  Users, ChevronDown, ChevronRight, ArrowLeft, TrendingUp, Sparkles,
+  Layers, Package, Check, X, AlertCircle
 } from 'lucide-react';
 import OfficialQuoteModal from './OfficialQuoteModal';
 import { exportQuoteToExcel } from '../utils/exportQuoteToExcel';
@@ -16,18 +15,21 @@ export default function QuotationRepo() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductFilter, setSelectedProductFilter] = useState('ALL');
-  const [selectedQuoteModal, setSelectedQuoteModal] = useState(null);
   
-  // Navigation & View Mode
-  const [activeTab, setActiveTab] = useState('crm'); // 'crm' | 'quotes'
-  const [dossierClient, setDossierClient] = useState(null); // Client object for detail modal
+  // Expanded client rows (Set of client names)
+  const [expandedClients, setExpandedClients] = useState(new Set());
   
-  // Clear Confirmation Modal
-  const [showClearModal, setShowClearModal] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
-  const [deleteTargetQuote, setDeleteTargetQuote] = useState(null);
+  // View full quote document inline (replaces table cleanly without popup distortion)
+  const [viewingQuoteDoc, setViewingQuoteDoc] = useState(null);
 
-  // Fetch quotes and client folders from backend API
+  // Inline confirmation state for wiping all data
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  // Inline confirmation state for deleting a single client
+  const [confirmDeleteClient, setConfirmDeleteClient] = useState(null);
+
+  // Fetch data
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -45,7 +47,7 @@ export default function QuotationRepo() {
         setClientFolders(Array.isArray(dataFolders) ? dataFolders : []);
       }
     } catch (err) {
-      console.error("Error fetching data from API:", err);
+      console.error("Error fetching data:", err);
     } finally {
       setLoading(false);
     }
@@ -55,6 +57,28 @@ export default function QuotationRepo() {
     fetchData();
   }, []);
 
+  // Toggle client row expansion
+  const toggleExpand = (clientName) => {
+    setExpandedClients(prev => {
+      const next = new Set(prev);
+      if (next.has(clientName)) {
+        next.delete(clientName);
+      } else {
+        next.add(clientName);
+      }
+      return next;
+    });
+  };
+
+  // Expand or collapse all
+  const toggleExpandAll = () => {
+    if (expandedClients.size === clientFolders.length) {
+      setExpandedClients(new Set());
+    } else {
+      setExpandedClients(new Set(clientFolders.map(c => c.clientName)));
+    }
+  };
+
   // Handle wiping all quotes
   const handleClearAllQuotes = async () => {
     setIsClearing(true);
@@ -63,13 +87,26 @@ export default function QuotationRepo() {
       if (res.ok) {
         setQuotes([]);
         setClientFolders([]);
-        setDossierClient(null);
-        setShowClearModal(false);
+        setExpandedClients(new Set());
+        setConfirmClearAll(false);
       }
     } catch (err) {
       console.error("Error clearing quotes:", err);
     } finally {
       setIsClearing(false);
+    }
+  };
+
+  // Handle deleting an entire client folder
+  const handleDeleteClientFolder = async (clientName) => {
+    try {
+      const res = await fetch(`/api/clients/folders/${encodeURIComponent(clientName)}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchData();
+        setConfirmDeleteClient(null);
+      }
+    } catch (err) {
+      console.error("Error deleting client folder:", err);
     }
   };
 
@@ -79,78 +116,13 @@ export default function QuotationRepo() {
       const res = await fetch(`/api/chat/quotes/${quoteId}`, { method: 'DELETE' });
       if (res.ok) {
         await fetchData();
-        setDeleteTargetQuote(null);
-        if (dossierClient) {
-          const updatedQuotes = dossierClient.quotes.filter(q => q.id !== quoteId);
-          if (updatedQuotes.length === 0) {
-            setDossierClient(null);
-          } else {
-            setDossierClient({ ...dossierClient, quotes: updatedQuotes });
-          }
-        }
       }
     } catch (err) {
       console.error("Error deleting quote:", err);
     }
   };
 
-  // Handle deleting an entire client dossier folder
-  const handleDeleteClientFolder = async (clientName) => {
-    try {
-      const res = await fetch(`/api/clients/folders/${encodeURIComponent(clientName)}`, { method: 'DELETE' });
-      if (res.ok) {
-        await fetchData();
-        if (dossierClient && dossierClient.clientName === clientName) {
-          setDossierClient(null);
-        }
-      }
-    } catch (err) {
-      console.error("Error deleting client folder:", err);
-    }
-  };
-
-  // Filtered quotes
-  const filteredQuotes = useMemo(() => {
-    return quotes.filter(q => {
-      const client = q.clientName || q.quoteObj?.customer?.name || '';
-      const matchesSearch = (q.productName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            (q.id || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            client.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesProduct = selectedProductFilter === 'ALL' || (q.productId || '').toLowerCase().includes(selectedProductFilter.toLowerCase());
-      return matchesSearch && matchesProduct;
-    });
-  }, [quotes, searchTerm, selectedProductFilter]);
-
-  // Filtered CRM Client Folders
-  const filteredClients = useMemo(() => {
-    return clientFolders.filter(f => {
-      const matchSearch = f.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          f.quotes.some(q => (q.productName || '').toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchProduct = selectedProductFilter === 'ALL' || f.quotes.some(q => (q.productId || '').toLowerCase().includes(selectedProductFilter.toLowerCase()));
-      return matchSearch && matchProduct;
-    });
-  }, [clientFolders, searchTerm, selectedProductFilter]);
-
-  // Calculate KPIs
-  const totalCount = quotes.length;
-  const totalClientsCount = clientFolders.length;
-  
-  const totalMonthlyUSD = quotes.reduce((acc, q) => {
-    if ((q.monthlyTotal || '').toUpperCase().includes('USD')) {
-      const match = (q.monthlyTotal || '').replace(/,/g, '').match(/[\d.]+/);
-      return acc + (match ? parseFloat(match[0]) : 0);
-    }
-    return acc;
-  }, 0);
-
-  const totalMonthlyDOP = quotes.reduce((acc, q) => {
-    if (!(q.monthlyTotal || '').toUpperCase().includes('USD')) {
-      const match = (q.monthlyTotal || '').replace(/,/g, '').match(/[\d.]+/);
-      return acc + (match ? parseFloat(match[0]) : 0);
-    }
-    return acc;
-  }, 0);
-
+  // Helper to parse or construct full Claro Quote Object
   const getFullQuoteObject = (q) => {
     if (!q) return null;
     if (q.quoteObj) return q.quoteObj;
@@ -229,745 +201,607 @@ export default function QuotationRepo() {
     exportQuoteToExcel(fullObj);
   };
 
-  // Helper to generate initials avatar
+  // Filtered clients list
+  const filteredClients = useMemo(() => {
+    return clientFolders.filter(c => {
+      const matchSearch = c.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          c.quotes.some(q => (q.productName || '').toLowerCase().includes(searchTerm.toLowerCase()) || (q.id || '').toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchProduct = selectedProductFilter === 'ALL' || c.quotes.some(q => (q.productId || '').toLowerCase().includes(selectedProductFilter.toLowerCase()));
+      return matchSearch && matchProduct;
+    });
+  }, [clientFolders, searchTerm, selectedProductFilter]);
+
+  // KPI Calculations
+  const totalCount = quotes.length;
+  const totalClientsCount = clientFolders.length;
+  
+  const totalMonthlyUSD = quotes.reduce((acc, q) => {
+    if ((q.monthlyTotal || '').toUpperCase().includes('USD')) {
+      const match = (q.monthlyTotal || '').replace(/,/g, '').match(/[\d.]+/);
+      return acc + (match ? parseFloat(match[0]) : 0);
+    }
+    return acc;
+  }, 0);
+
+  const totalMonthlyDOP = quotes.reduce((acc, q) => {
+    if (!(q.monthlyTotal || '').toUpperCase().includes('USD')) {
+      const match = (q.monthlyTotal || '').replace(/,/g, '').match(/[\d.]+/);
+      return acc + (match ? parseFloat(match[0]) : 0);
+    }
+    return acc;
+  }, 0);
+
   const getInitials = (name) => {
     if (!name) return 'CL';
     const words = name.trim().split(' ');
-    if (words.length >= 2) {
-      return (words[0][0] + words[1][0]).toUpperCase();
-    }
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
     return name.slice(0, 2).toUpperCase();
   };
 
-  return (
-    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      
-      {/* Header Banner */}
-      <div className="glass-panel no-print" style={{ 
-        padding: '20px 24px', 
-        backgroundColor: 'var(--bg-secondary)', 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        flexWrap: 'wrap', 
-        gap: '16px',
-        borderLeft: '4px solid var(--claro-red)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '12px', backgroundColor: 'var(--claro-red-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Briefcase size={24} color="var(--claro-red)" />
-          </div>
-          <div>
-            <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--text-primary)', margin: 0, fontFamily: 'var(--font-display)' }}>
-              CRM y Gestor de Cotizaciones Corporativas
-            </h2>
-            <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', margin: 0 }}>
-              Expedientes organizados por cliente con propuestas oficiales, cálculos fiscales y exportación directa
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+  // If user is previewing a quote, render the in-page clean document view (No modal distortion!)
+  if (viewingQuoteDoc) {
+    const fullQuote = getFullQuoteObject(viewingQuoteDoc);
+    return (
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Top bar */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          padding: '16px 20px', 
+          backgroundColor: 'var(--bg-secondary)', 
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border-color)',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }} className="no-print">
           <button 
-            onClick={fetchData} 
-            className="btn btn-secondary" 
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', fontSize: '0.825rem' }}
+            onClick={() => setViewingQuoteDoc(null)}
+            className="btn btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
           >
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} /> Actualizar
+            <ArrowLeft size={16} /> Volver a Cotizaciones
           </button>
 
-          {quotes.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button 
-              onClick={() => setShowClearModal(true)} 
-              className="btn" 
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '6px', 
-                padding: '8px 14px', 
-                fontSize: '0.825rem', 
-                backgroundColor: 'rgba(239, 68, 68, 0.1)', 
-                color: '#ef4444', 
-                border: '1px solid rgba(239, 68, 68, 0.25)' 
-              }}
+              onClick={() => handleDownloadExcel(viewingQuoteDoc)}
+              className="btn btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
             >
-              <Trash2 size={15} /> Vaciar Historial
+              <FileSpreadsheet size={15} color="#10B981" /> Descargar Excel
             </button>
-          )}
+            <button 
+              onClick={() => window.print()}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+            >
+              <Printer size={15} /> Imprimir / Guardar PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Official Printable Sheet Container */}
+        <div style={{ maxWidth: '850px', margin: '0 auto', width: '100%' }}>
+          <OfficialQuoteModal quote={fullQuote} isEmbedded={true} onClose={() => setViewingQuoteDoc(null)} />
         </div>
       </div>
+    );
+  }
 
-      {/* KPI Stats Grid - 4 Columns Horizontal */}
+  return (
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      
+      {/* 4 Minimal Metric Cards (Stripe/Linear Style) */}
       <div style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', 
-        gap: '16px' 
+        gap: '12px' 
       }} className="no-print">
         
-        {/* KPI 1: Clientes */}
-        <div className="glass-panel" style={{ 
-          padding: '16px 18px', 
+        {/* Metric 1 */}
+        <div style={{ 
+          padding: '14px 18px', 
           backgroundColor: 'var(--bg-secondary)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '14px',
-          borderLeft: '3px solid #D97706'
+          borderRadius: 'var(--radius-md)', 
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Building size={20} />
-          </div>
-          <div style={{ overflow: 'hidden' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Clientes Atendidos
-            </span>
-            <h3 style={{ fontSize: '1.45rem', fontWeight: '800', color: 'var(--text-primary)', margin: '2px 0 0 0' }}>
+          <div>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Clientes
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-primary)', marginTop: '2px' }}>
               {totalClientsCount}
-            </h3>
+            </div>
+          </div>
+          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Building size={18} />
           </div>
         </div>
 
-        {/* KPI 2: Cotizaciones */}
-        <div className="glass-panel" style={{ 
-          padding: '16px 18px', 
+        {/* Metric 2 */}
+        <div style={{ 
+          padding: '14px 18px', 
           backgroundColor: 'var(--bg-secondary)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '14px',
-          borderLeft: '3px solid var(--claro-red)'
+          borderRadius: 'var(--radius-md)', 
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--claro-red-light)', color: 'var(--claro-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <FileText size={20} />
-          </div>
-          <div style={{ overflow: 'hidden' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Propuestas Creadas
-            </span>
-            <h3 style={{ fontSize: '1.45rem', fontWeight: '800', color: 'var(--text-primary)', margin: '2px 0 0 0' }}>
+          <div>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Propuestas
+            </div>
+            <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-primary)', marginTop: '2px' }}>
               {totalCount}
-            </h3>
+            </div>
+          </div>
+          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: 'var(--claro-red-light)', color: 'var(--claro-red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <FileText size={18} />
           </div>
         </div>
 
-        {/* KPI 3: Renta DOP */}
-        <div className="glass-panel" style={{ 
-          padding: '16px 18px', 
+        {/* Metric 3 */}
+        <div style={{ 
+          padding: '14px 18px', 
           backgroundColor: 'var(--bg-secondary)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '14px',
-          borderLeft: '3px solid #059669'
+          borderRadius: 'var(--radius-md)', 
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#D1FAE5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <TrendingUp size={20} />
-          </div>
           <div style={{ overflow: 'hidden' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Renta Mensual DOP
-            </span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', margin: '2px 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              RD$ {totalMonthlyDOP.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </h3>
+            </div>
+            <div style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-primary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              RD$ {totalMonthlyDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#D1FAE5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <TrendingUp size={18} />
           </div>
         </div>
 
-        {/* KPI 4: Renta USD */}
-        <div className="glass-panel" style={{ 
-          padding: '16px 18px', 
+        {/* Metric 4 */}
+        <div style={{ 
+          padding: '14px 18px', 
           backgroundColor: 'var(--bg-secondary)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '14px',
-          borderLeft: '3px solid #0284C7'
+          borderRadius: 'var(--radius-md)', 
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#E0F2FE', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <DollarSign size={20} />
-          </div>
           <div style={{ overflow: 'hidden' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Renta Mensual USD
-            </span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-primary)', margin: '2px 0 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              ${totalMonthlyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-            </h3>
+            </div>
+            <div style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-primary)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              ${totalMonthlyUSD.toFixed(2)} USD
+            </div>
+          </div>
+          <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#E0F2FE', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <DollarSign size={18} />
           </div>
         </div>
 
       </div>
 
-      {/* Control Bar: Search + Filter + View Toggle */}
-      <div className="glass-panel no-print" style={{ 
-        padding: '14px 20px', 
-        backgroundColor: 'var(--bg-secondary)', 
+      {/* Action & Filter Toolbar (Stripe/Linear Style) */}
+      <div style={{ 
         display: 'flex', 
-        alignItems: 'center', 
         justifyContent: 'space-between', 
+        alignItems: 'center', 
         flexWrap: 'wrap', 
-        gap: '12px' 
-      }}>
+        gap: '12px',
+        padding: '12px 16px',
+        backgroundColor: 'var(--bg-secondary)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border-color)'
+      }} className="no-print">
         
-        {/* Search */}
-        <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input 
-            type="text" 
-            className="form-input" 
-            placeholder="Buscar por cliente, cotización o solución..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ paddingLeft: '38px', fontSize: '0.85rem', height: '38px' }}
-          />
+        {/* Search & Filter pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '280px' }}>
+          <div style={{ position: 'relative', flex: 1, maxWidth: '320px' }}>
+            <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input 
+              type="text" 
+              className="form-input" 
+              placeholder="Filtrar por cliente, producto o ID..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ paddingLeft: '34px', fontSize: '0.825rem', height: '34px' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '4px' }}>
+            {['ALL', 'hpbx', 'cloud', 'movil'].map(type => (
+              <button 
+                key={type}
+                onClick={() => setSelectedProductFilter(type)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid',
+                  borderColor: selectedProductFilter === type ? 'var(--claro-red)' : 'var(--border-color)',
+                  backgroundColor: selectedProductFilter === type ? 'var(--claro-red-light)' : 'transparent',
+                  color: selectedProductFilter === type ? 'var(--claro-red)' : 'var(--text-secondary)',
+                  fontWeight: selectedProductFilter === type ? '700' : '500',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {type === 'ALL' ? 'Todos' : type === 'hpbx' ? 'HPBX' : type === 'cloud' ? 'Cloud' : 'Móviles'}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Product Filter */}
-        <select 
-          className="form-input" 
-          value={selectedProductFilter}
-          onChange={(e) => setSelectedProductFilter(e.target.value)}
-          style={{ fontSize: '0.85rem', padding: '8px 12px', width: 'auto', height: '38px' }}
-        >
-          <option value="ALL">Todas las Soluciones</option>
-          <option value="hpbx">Hosted PBX Claro</option>
-          <option value="cloud">Claro Cloud</option>
-          <option value="movil">Planes Móviles</option>
-        </select>
+        {/* Global Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {clientFolders.length > 0 && (
+            <button 
+              onClick={toggleExpandAll}
+              className="btn btn-secondary"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+            >
+              {expandedClients.size === clientFolders.length ? 'Colapsar Filas' : 'Expandir Filas'}
+            </button>
+          )}
 
-        {/* View switcher */}
-        <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--bg-primary)', padding: '3px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
           <button 
-            onClick={() => setActiveTab('crm')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-sm)',
-              border: 'none',
-              backgroundColor: activeTab === 'crm' ? 'var(--claro-red)' : 'transparent',
-              color: activeTab === 'crm' ? '#ffffff' : 'var(--text-secondary)',
-              fontWeight: '700',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
+            onClick={fetchData}
+            className="btn btn-secondary"
+            style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+            title="Recargar datos"
           >
-            <Users size={14} /> Clientes ({totalClientsCount})
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Actualizar
           </button>
-          <button 
-            onClick={() => setActiveTab('quotes')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-sm)',
-              border: 'none',
-              backgroundColor: activeTab === 'quotes' ? 'var(--claro-red)' : 'transparent',
-              color: activeTab === 'quotes' ? '#ffffff' : 'var(--text-secondary)',
-              fontWeight: '700',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <FileText size={14} /> Propuestas ({totalCount})
-          </button>
+
+          {quotes.length > 0 && !confirmClearAll && (
+            <button 
+              onClick={() => setConfirmClearAll(true)}
+              className="btn"
+              style={{ padding: '6px 12px', fontSize: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+            >
+              <Trash2 size={13} /> Vaciar Todo
+            </button>
+          )}
+
+          {confirmClearAll && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid #ef4444' }}>
+              <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: '700' }}>¿Confirmar vaciado?</span>
+              <button 
+                onClick={handleClearAllQuotes}
+                disabled={isClearing}
+                style={{ padding: '2px 8px', fontSize: '0.7rem', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '700' }}
+              >
+                {isClearing ? '...' : 'Sí'}
+              </button>
+              <button 
+                onClick={() => setConfirmClearAll(false)}
+                style={{ padding: '2px 6px', fontSize: '0.7rem', backgroundColor: 'transparent', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer' }}
+              >
+                No
+              </button>
+            </div>
+          )}
         </div>
 
       </div>
 
-      {/* Main CRM Table View */}
+      {/* Main Stripe/Linear Interactive Table */}
       {loading ? (
-        <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 14px auto', color: 'var(--claro-red)' }} />
-          <span style={{ fontSize: '0.95rem', fontWeight: '600' }}>Cargando datos comerciales...</span>
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+          <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px auto', color: 'var(--claro-red)' }} />
+          <div style={{ fontSize: '0.875rem' }}>Cargando cotizaciones...</div>
         </div>
-      ) : quotes.length === 0 ? (
+      ) : clientFolders.length === 0 ? (
         /* Empty State */
-        <div className="glass-panel" style={{ padding: '60px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
-            <FolderOpen size={28} style={{ color: 'var(--text-muted)' }} />
-          </div>
-          <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '6px' }}>
-            Repositorio Comercial Limpio
+        <div style={{ padding: '50px 20px', textAlign: 'center', color: 'var(--text-muted)', backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
+          <Building size={32} style={{ margin: '0 auto 12px auto', color: 'var(--text-muted)', opacity: 0.5 }} />
+          <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
+            No hay cotizaciones registradas
           </h3>
-          <p style={{ fontSize: '0.875rem', maxWidth: '500px', margin: '0 auto 20px auto', lineHeight: '1.5' }}>
-            No hay cotizaciones registradas. Al interactuar con <strong>Clara (Copilot)</strong> o solicitar una propuesta, el sistema creará automáticamente la ficha del cliente y su carpeta correspondiente.
+          <p style={{ fontSize: '0.825rem', maxWidth: '420px', margin: '0 auto' }}>
+            Solicita una cotización a <strong>Clara</strong> o en el catálogo de productos para crear un cliente y sus propuestas automáticamente.
           </p>
         </div>
-      ) : activeTab === 'crm' ? (
-        /* TABLA MODERNA CRM DE CLIENTES */
-        <div className="glass-panel" style={{ padding: '0', backgroundColor: 'var(--bg-secondary)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Cliente / Empresa</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Solución Cotizada</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700', textAlign: 'center' }}>Propuestas</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Renta Mensual</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Instalación</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Última Actividad</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700', textAlign: 'right' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredClients.map((client) => {
-                  const primaryQuote = client.quotes[0] || {};
-                  const isHpba = (primaryQuote.productId || '').includes('hpbx') || (primaryQuote.productName || '').toLowerCase().includes('hpbx');
-                  
-                  return (
+      ) : (
+        <div style={{ 
+          backgroundColor: 'var(--bg-secondary)', 
+          borderRadius: 'var(--radius-md)', 
+          border: '1px solid var(--border-color)', 
+          overflow: 'hidden' 
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.825rem' }}>
+            <thead>
+              <tr style={{ backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.04em' }}>
+                <th style={{ width: '40px', padding: '12px 14px' }}></th>
+                <th style={{ padding: '12px 14px' }}>Cliente / Empresa</th>
+                <th style={{ padding: '12px 14px' }}>Solución Principal</th>
+                <th style={{ padding: '12px 14px', textAlign: 'center' }}>Propuestas</th>
+                <th style={{ padding: '12px 14px' }}>Renta Mensual</th>
+                <th style={{ padding: '12px 14px' }}>Instalación</th>
+                <th style={{ padding: '12px 14px' }}>Fecha</th>
+                <th style={{ padding: '12px 14px', textAlign: 'right' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredClients.map((client) => {
+                const isExpanded = expandedClients.has(client.clientName);
+                const primaryQuote = client.quotes[0] || {};
+                const isHpba = (primaryQuote.productId || '').includes('hpbx') || (primaryQuote.productName || '').toLowerCase().includes('hpbx');
+                
+                return (
+                  <React.Fragment key={client.clientName}>
+                    {/* Main Client Row */}
                     <tr 
-                      key={client.clientName}
-                      style={{ borderBottom: '1px solid var(--border-color)', transition: 'background-color var(--transition-fast)' }}
+                      style={{ 
+                        borderBottom: isExpanded ? 'none' : '1px solid var(--border-color)',
+                        backgroundColor: isExpanded ? 'var(--bg-tertiary)' : 'transparent',
+                        transition: 'background-color var(--transition-fast)'
+                      }}
                       className="table-row-hover"
                     >
-                      {/* Cliente */}
-                      <td style={{ padding: '14px 18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      {/* Expand Chevron Toggle */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <button 
+                          onClick={() => toggleExpand(client.clientName)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          title={isExpanded ? "Colapsar detalles" : "Expandir cotizaciones de este cliente"}
+                        >
+                          {isExpanded ? <ChevronDown size={16} color="var(--claro-red)" /> : <ChevronRight size={16} />}
+                        </button>
+                      </td>
+
+                      {/* Client Name + Folder */}
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div style={{ 
-                            width: '38px', 
-                            height: '38px', 
-                            borderRadius: '10px', 
+                            width: '32px', 
+                            height: '32px', 
+                            borderRadius: '6px', 
                             backgroundColor: '#FEF3C7', 
                             color: '#D97706', 
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'center', 
                             fontWeight: '800',
-                            fontSize: '0.85rem',
+                            fontSize: '0.75rem',
                             flexShrink: 0
                           }}>
                             {getInitials(client.clientName)}
                           </div>
                           <div>
-                            <div style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                            <div style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '0.875rem' }}>
                               {client.clientName}
                             </div>
-                            <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                               📁 {client.folderPath}
                             </span>
                           </div>
                         </div>
                       </td>
 
-                      {/* Solución */}
-                      <td style={{ padding: '14px 18px' }}>
+                      {/* Main Solution */}
+                      <td style={{ padding: '12px 14px' }}>
                         <span className="badge" style={{ 
-                          backgroundColor: isHpba ? 'rgba(238, 28, 36, 0.1)' : 'rgba(2, 132, 199, 0.1)', 
+                          backgroundColor: isHpba ? 'rgba(238, 28, 36, 0.08)' : 'rgba(2, 132, 199, 0.08)', 
                           color: isHpba ? 'var(--claro-red)' : '#0284C7',
-                          fontWeight: '700',
-                          fontSize: '0.75rem'
+                          fontWeight: '600',
+                          fontSize: '0.725rem'
                         }}>
                           {primaryQuote.productName || 'Hosted PBX Claro'}
                         </span>
                       </td>
 
-                      {/* Cantidad de propuestas */}
-                      <td style={{ padding: '14px 18px', textAlign: 'center' }}>
-                        <span className="badge" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', fontWeight: '700', color: 'var(--text-primary)' }}>
-                          {client.totalQuotes} {client.totalQuotes === 1 ? 'cotización' : 'cotizaciones'}
+                      {/* Proposal Count */}
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <span style={{ 
+                          padding: '2px 8px', 
+                          borderRadius: '12px', 
+                          backgroundColor: 'var(--bg-primary)', 
+                          border: '1px solid var(--border-color)', 
+                          fontSize: '0.75rem', 
+                          fontWeight: '700', 
+                          color: 'var(--text-primary)' 
+                        }}>
+                          {client.totalQuotes}
                         </span>
                       </td>
 
-                      {/* Renta Mensual */}
-                      <td style={{ padding: '14px 18px' }}>
-                        <div style={{ fontWeight: '800', color: 'var(--claro-red)', fontSize: '0.95rem' }}>
+                      {/* Monthly Total */}
+                      <td style={{ padding: '12px 14px' }}>
+                        <div style={{ fontWeight: '800', color: 'var(--claro-red)', fontSize: '0.9rem' }}>
                           {client.totalMonthlyDOP > 0 ? `RD$ ${client.totalMonthlyDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })}` : `$ ${client.totalMonthlyUSD.toFixed(2)} USD`}
                         </div>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>con impuestos</span>
+                        <span style={{ fontSize: '0.675rem', color: 'var(--text-muted)' }}>con impuestos</span>
                       </td>
 
-                      {/* Instalación */}
-                      <td style={{ padding: '14px 18px' }}>
-                        <div style={{ fontWeight: '600', color: '#10B981', fontSize: '0.85rem' }}>
-                          {primaryQuote.setupFee || 'N/A'}
-                        </div>
+                      {/* Setup Fee */}
+                      <td style={{ padding: '12px 14px', color: '#10B981', fontWeight: '600', fontSize: '0.8rem' }}>
+                        {primaryQuote.setupFee || 'N/A'}
                       </td>
 
-                      {/* Fecha */}
-                      <td style={{ padding: '14px 18px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Calendar size={13} />
-                          {client.lastDate ? new Date(client.lastDate).toLocaleDateString('es-DO') : 'Reciente'}
-                        </div>
+                      {/* Date */}
+                      <td style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        {client.lastDate ? new Date(client.lastDate).toLocaleDateString('es-DO') : 'Reciente'}
                       </td>
 
-                      {/* Acciones */}
-                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                      {/* Actions */}
+                      <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                           <button 
-                            onClick={() => setDossierClient(client)}
+                            onClick={() => toggleExpand(client.clientName)}
                             className="btn btn-secondary" 
-                            style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            title="Ver expediente y propuestas del cliente"
+                            style={{ padding: '4px 8px', fontSize: '0.725rem' }}
+                            title="Ver desglose de cotizaciones"
                           >
-                            <FolderOpen size={13} color="#D97706" /> Expediente
+                            {isExpanded ? 'Ocultar' : 'Ver Propuestas'}
                           </button>
+
                           <button 
                             onClick={() => handleDownloadExcel(primaryQuote)} 
                             className="btn btn-secondary" 
-                            style={{ padding: '6px 8px', fontSize: '0.75rem' }}
-                            title="Descargar Excel oficial (.xlsx)"
+                            style={{ padding: '4px 8px', fontSize: '0.725rem' }}
+                            title="Descargar Excel (.xlsx)"
                           >
-                            <FileSpreadsheet size={14} color="#10B981" />
+                            <FileSpreadsheet size={13} color="#10B981" /> Excel
                           </button>
+
                           <button 
-                            onClick={() => setSelectedQuoteModal(primaryQuote)} 
+                            onClick={() => setViewingQuoteDoc(primaryQuote)} 
                             className="btn btn-primary" 
-                            style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            title="Imprimir propuesta oficial en PDF"
+                            style={{ padding: '4px 10px', fontSize: '0.725rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            title="Ver plantilla oficial / Imprimir PDF"
                           >
                             <Printer size={13} /> PDF
                           </button>
-                          <button 
-                            onClick={() => {
-                              if (window.confirm(`¿Deseas eliminar el expediente completo y todas las cotizaciones de "${client.clientName}"?`)) {
-                                handleDeleteClientFolder(client.clientName);
-                              }
-                            }}
-                            className="btn btn-secondary" 
-                            style={{ padding: '6px 8px', fontSize: '0.75rem', color: '#ef4444' }}
-                            title="Eliminar este cliente y sus cotizaciones"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+
+                          {confirmDeleteClient === client.clientName ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                              <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>¿Borrar?</span>
+                              <button 
+                                onClick={() => handleDeleteClientFolder(client.clientName)}
+                                style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '3px', fontSize: '0.65rem', padding: '1px 5px', cursor: 'pointer' }}
+                              >
+                                Sí
+                              </button>
+                              <button 
+                                onClick={() => setConfirmDeleteClient(null)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.65rem', cursor: 'pointer' }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => setConfirmDeleteClient(client.clientName)}
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 6px', color: '#ef4444' }}
+                              title="Eliminar cliente y sus cotizaciones"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                    {/* Expandable Sub-Table (Stripe/Linear Nested Rows) */}
+                    {isExpanded && (
+                      <tr style={{ backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)' }}>
+                        <td colSpan={8} style={{ padding: '0 0 16px 54px' }}>
+                          <div style={{ 
+                            backgroundColor: 'var(--bg-secondary)', 
+                            borderRadius: 'var(--radius-sm)', 
+                            border: '1px solid var(--border-color)', 
+                            marginRight: '14px',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{ 
+                              padding: '8px 14px', 
+                              backgroundColor: 'var(--bg-primary)', 
+                              borderBottom: '1px solid var(--border-color)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                                Propuestas individuales de {client.clientName} ({client.quotes.length})
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                Total acumulado: <strong>RD$ {client.totalMonthlyDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })} / mes</strong>
+                              </span>
+                            </div>
+
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.775rem' }}>
+                              <thead>
+                                <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>
+                                  <th style={{ padding: '8px 12px' }}>Código ID</th>
+                                  <th style={{ padding: '8px 12px' }}>Producto / Descripción</th>
+                                  <th style={{ padding: '8px 12px', textAlign: 'center' }}>Estaciones</th>
+                                  <th style={{ padding: '8px 12px' }}>Precio Unitario</th>
+                                  <th style={{ padding: '8px 12px' }}>Renta Mensual</th>
+                                  <th style={{ padding: '8px 12px' }}>Instalación</th>
+                                  <th style={{ padding: '8px 12px', textAlign: 'right' }}>Acciones</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {client.quotes.map((quote) => (
+                                  <tr key={quote.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                    <td style={{ padding: '8px 12px', fontFamily: 'monospace', color: 'var(--text-muted)' }}>
+                                      {quote.id}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                                      {quote.productName}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: '700' }}>
+                                      {quote.quantity}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>
+                                      {quote.unitPrice}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', fontWeight: '700', color: 'var(--claro-red)' }}>
+                                      {quote.monthlyTotal}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', color: '#10B981' }}>
+                                      {quote.setupFee || 'N/A'}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                                        <button 
+                                          onClick={() => handleDownloadExcel(quote)}
+                                          className="btn btn-secondary"
+                                          style={{ padding: '3px 6px', fontSize: '0.7rem' }}
+                                          title="Descargar Excel"
+                                        >
+                                          <FileSpreadsheet size={12} color="#10B981" />
+                                        </button>
+                                        <button 
+                                          onClick={() => setViewingQuoteDoc(quote)}
+                                          className="btn btn-primary"
+                                          style={{ padding: '3px 8px', fontSize: '0.7rem' }}
+                                          title="Ver PDF Oficial"
+                                        >
+                                          <Printer size={12} />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleDeleteQuote(quote.id)}
+                                          className="btn btn-secondary"
+                                          style={{ padding: '3px 6px', color: '#ef4444' }}
+                                          title="Eliminar esta cotización"
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        /* VISTA: TODAS LAS COTIZACIONES EN TABLA DETALLADA */
-        <div className="glass-panel" style={{ padding: '0', backgroundColor: 'var(--bg-secondary)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-              <thead>
-                <tr style={{ backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Código / Fecha</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Cliente</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Solución</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700', textAlign: 'center' }}>Estaciones</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Renta Mensual</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700' }}>Instalación</th>
-                  <th style={{ padding: '14px 18px', fontWeight: '700', textAlign: 'right' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredQuotes.map((quote) => (
-                  <tr 
-                    key={quote.id} 
-                    style={{ borderBottom: '1px solid var(--border-color)' }}
-                    className="table-row-hover"
-                  >
-                    <td style={{ padding: '14px 18px' }}>
-                      <div style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{quote.id}</div>
-                      <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-                        {quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('es-DO') : 'Reciente'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 18px', fontWeight: '800', color: 'var(--text-primary)' }}>
-                      {quote.clientName || 'Cliente Claro'}
-                    </td>
-                    <td style={{ padding: '14px 18px' }}>
-                      <span className="badge" style={{ backgroundColor: 'rgba(238, 28, 36, 0.1)', color: 'var(--claro-red)', fontWeight: '700' }}>
-                        {quote.productName}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 18px', textAlign: 'center', fontWeight: '700' }}>
-                      {quote.quantity}
-                    </td>
-                    <td style={{ padding: '14px 18px', fontWeight: '800', color: 'var(--claro-red)' }}>
-                      {quote.monthlyTotal}
-                    </td>
-                    <td style={{ padding: '14px 18px', color: '#10B981', fontWeight: '600' }}>
-                      {quote.setupFee || 'N/A'}
-                    </td>
-                    <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                        <button 
-                          onClick={() => setDeleteTargetQuote(quote)}
-                          className="btn btn-secondary" 
-                          style={{ padding: '6px 8px', color: '#ef4444' }}
-                          title="Eliminar propuesta"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                        <button 
-                          onClick={() => handleDownloadExcel(quote)} 
-                          className="btn btn-secondary" 
-                          style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          title="Descargar Excel oficial (.xlsx)"
-                        >
-                          <FileSpreadsheet size={13} color="#10B981" /> Excel
-                        </button>
-                        <button 
-                          onClick={() => setSelectedQuoteModal(quote)} 
-                          className="btn btn-primary" 
-                          style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                          title="Ver e Imprimir plantilla oficial en PDF"
-                        >
-                          <Printer size={13} /> PDF
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Expediente del Cliente (Dossier) */}
-      {dossierClient && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }}>
-          <div className="glass-panel animate-scale-up" style={{ 
-            maxWidth: '750px', 
-            width: '100%', 
-            maxHeight: '85vh',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '0', 
-            backgroundColor: 'var(--bg-secondary)',
-            overflow: 'hidden'
-          }}>
-            {/* Modal Header */}
-            <div style={{ 
-              padding: '18px 24px', 
-              backgroundColor: 'var(--bg-primary)', 
-              borderBottom: '1px solid var(--border-color)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800' }}>
-                  {getInitials(dossierClient.clientName)}
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-primary)', margin: 0 }}>
-                    Expediente: {dossierClient.clientName}
-                  </h3>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    📁 Carpeta SharePoint: {dossierClient.folderPath}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button 
-                  onClick={() => {
-                    if (window.confirm(`¿Deseas eliminar todas las cotizaciones del expediente de "${dossierClient.clientName}"?`)) {
-                      handleDeleteClientFolder(dossierClient.clientName);
-                    }
-                  }}
-                  className="btn"
-                  style={{ padding: '6px 12px', fontSize: '0.8rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.25)', display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <Trash2 size={13} /> Eliminar Expediente
-                </button>
-
-                <button 
-                  onClick={() => setDossierClient(null)}
-                  className="btn btn-secondary"
-                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-
-            {/* Modal Body - Quotes List */}
-            <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                  Propuestas Registradas ({dossierClient.quotes.length})
-                </span>
-                <span className="badge" style={{ backgroundColor: '#D1FAE5', color: '#059669', fontWeight: '700' }}>
-                  Total Inversión: RD$ {dossierClient.totalMonthlyDOP.toLocaleString('es-DO', { minimumFractionDigits: 2 })} / mes
-                </span>
-              </div>
-
-              {dossierClient.quotes.map(quote => (
-                <div 
-                  key={quote.id}
-                  style={{
-                    backgroundColor: 'var(--bg-primary)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '16px 18px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '12px'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
-                        {quote.productName}
-                      </span>
-                      <span className="badge" style={{ fontSize: '0.7rem' }}>{quote.id}</span>
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', gap: '14px' }}>
-                      <span>Usuarios / Estaciones: <strong>{quote.quantity}</strong></span>
-                      <span>Precio Unitario: <strong>{quote.unitPrice}</strong></span>
-                      {quote.setupFee && <span>Instalación: <strong style={{ color: '#10B981' }}>{quote.setupFee}</strong></span>}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--claro-red)' }}>
-                        {quote.monthlyTotal}
-                      </div>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Renta Mensual</span>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button 
-                        onClick={() => handleDownloadExcel(quote)} 
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        title="Descargar Excel oficial"
-                      >
-                        <FileSpreadsheet size={13} color="#10B981" /> Excel
-                      </button>
-                      <button 
-                        onClick={() => setSelectedQuoteModal(quote)} 
-                        className="btn btn-primary" 
-                        style={{ padding: '6px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        title="Ver e Imprimir PDF"
-                      >
-                        <Printer size={13} /> PDF
-                      </button>
-                      <button 
-                        onClick={() => setDeleteTargetQuote(quote)}
-                        className="btn btn-secondary" 
-                        style={{ padding: '6px 8px', color: '#ef4444' }}
-                        title="Eliminar cotización"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Clear All Confirmation Modal */}
-      {showClearModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }}>
-          <div className="glass-panel animate-scale-up" style={{ maxWidth: '440px', width: '100%', padding: '24px', backgroundColor: 'var(--bg-secondary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', color: '#ef4444' }}>
-              <AlertTriangle size={28} />
-              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>
-                ¿Vaciar Repositorio de Cotizaciones?
-              </h3>
-            </div>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5', marginBottom: '20px' }}>
-              Esta acción eliminará de forma permanente <strong>todas las cotizaciones y expedientes de clientes ({quotes.length} propuestas)</strong> de PostgreSQL y del almacenamiento local.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button 
-                onClick={() => setShowClearModal(false)}
-                className="btn btn-secondary"
-                disabled={isClearing}
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleClearAllQuotes}
-                className="btn"
-                style={{ backgroundColor: '#ef4444', color: '#ffffff' }}
-                disabled={isClearing}
-              >
-                {isClearing ? 'Vaciando...' : 'Sí, Vaciar Todo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Single Quote Modal */}
-      {deleteTargetQuote && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }}>
-          <div className="glass-panel animate-scale-up" style={{ maxWidth: '420px', width: '100%', padding: '24px', backgroundColor: 'var(--bg-secondary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', color: '#ef4444' }}>
-              <Trash2 size={24} />
-              <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)' }}>
-                Eliminar Cotización
-              </h3>
-            </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5', marginBottom: '20px' }}>
-              ¿Estás seguro de eliminar la cotización <strong>{deleteTargetQuote.id}</strong> para <strong>{deleteTargetQuote.clientName}</strong>?
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button 
-                onClick={() => setDeleteTargetQuote(null)}
-                className="btn btn-secondary"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={() => handleDeleteQuote(deleteTargetQuote.id)}
-                className="btn"
-                style={{ backgroundColor: '#ef4444', color: '#ffffff' }}
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Official Printable / Detail Quote Modal */}
-      {selectedQuoteModal && (
-        <OfficialQuoteModal 
-          quote={getFullQuoteObject(selectedQuoteModal)} 
-          onClose={() => setSelectedQuoteModal(null)} 
-        />
       )}
 
     </div>
   );
 }
+
 
 
