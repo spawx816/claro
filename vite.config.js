@@ -7,6 +7,10 @@ import { simpleParser } from 'mailparser'
 import { getMessages, saveMessage, clearMessages, getQuotes, clearAllQuotes, deleteQuote, deleteClientFolder, getClientFolders, getCommercialDocuments, saveCommercialDocument, bulkSaveCommercialDocuments, searchCommercialDocuments } from './db.js'
 import { parseAndGenerateHPBXFromText, extractClientNameFromText } from './src/utils/hpbxQuotationModel.js'
 import mammoth from 'mammoth'
+import MsgReader from '@kenjiuno/msgreader'
+import { decompressRTF } from '@kenjiuno/decompressrtf'
+import { deEncapsulateSync } from 'rtf-stream-parser'
+import iconv from 'iconv-lite'
 import XLSX from 'xlsx'
 
 // Helper to fetch and parse emails from an IMAP server
@@ -252,10 +256,63 @@ export default defineConfig({
               const { messages = [], userMsgText = '', model = 'gpt-4o-mini', apiKey, lastQuoteObj } = body;
               const effectiveKey = apiKey || process.env.OPENAI_API_KEY;
 
-              // 1. Search for relevant RAG documents from PostgreSQL
+              function searchCommunicationsRepo(query, limit = 4) {
+                if (!query || query.trim() === '') return [];
+                try {
+                  const rootDir = process.cwd();
+                  const emailDir = path.join(rootDir, 'email');
+                  const matches = [];
+                  const tokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+                  if (tokens.length === 0) return [];
+
+                  const ReaderClass = MsgReader.default || MsgReader;
+                  if (fs.existsSync(emailDir)) {
+                    const msgFiles = fs.readdirSync(emailDir).filter(f => f.endsWith('.msg'));
+                    for (const f of msgFiles) {
+                      try {
+                        const filePath = path.join(emailDir, f);
+                        const buf = fs.readFileSync(filePath);
+                        const reader = new ReaderClass(buf);
+                        const info = reader.getFileData();
+
+                        const subject = info.subject || f.replace('.msg', '');
+                        const body = info.body || '';
+                        const fullText = (subject + ' ' + body).toLowerCase();
+
+                        let score = 0;
+                        tokens.forEach(tok => {
+                          if (subject.toLowerCase().includes(tok)) score += 6;
+                          if (fullText.includes(tok)) score += 1;
+                        });
+
+                        if (score > 0) {
+                          const ancMatch = subject.match(/ANUNCIO\s+(?:NO\.?|NÚM\.?|Nº)?\s*(\d+)(?:\s*[-–]?\s*([A-Z]))?/i);
+                          matches.push({
+                            score,
+                            id: 'msg-' + f.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+                            subject,
+                            title: subject,
+                            ancNum: ancMatch ? ancMatch[1] : null,
+                            ancVariant: ancMatch && ancMatch[2] ? ancMatch[2].toUpperCase() : null,
+                            sender: info.senderName || 'Info-Canales Claro',
+                            bodySnippet: body.slice(0, 450)
+                          });
+                        }
+                      } catch(e) {}
+                    }
+                  }
+                  return matches.sort((a, b) => b.score - a.score).slice(0, limit);
+                } catch (err) {
+                  return [];
+                }
+              }
+
+              // 1. Search for relevant RAG documents from PostgreSQL & Communications Repo
               let ragDocs = [];
+              let commDocs = [];
               try {
-                ragDocs = await searchCommercialDocuments(userMsgText, 4);
+                ragDocs = await searchCommercialDocuments(userMsgText, 3);
+                commDocs = searchCommunicationsRepo(userMsgText, 4);
               } catch (e) {
                 console.error("RAG search error:", e.message);
               }
@@ -263,8 +320,12 @@ export default defineConfig({
               // 2. Format RAG context
               let ragContextText = "";
               if (ragDocs && ragDocs.length > 0) {
-                ragContextText = "\n\n[DOCUMENTOS COMERCIALES Y FICHAS TÉCNICAS RELEVANTES DE SHAREPOINT/ONEDRIVE]:\n" + 
+                ragContextText += "\n\n[DOCUMENTOS COMERCIALES Y FICHAS TÉCNICAS RELEVANTES DE SHAREPOINT/ONEDRIVE]:\n" + 
                   ragDocs.map((d, idx) => `Documento ${idx+1}: "${d.title || d.name}" (Categoría: ${d.category})\nResumen: ${d.aiSummary || d.contentPreview?.slice(0, 300)}`).join('\n\n');
+              }
+              if (commDocs && commDocs.length > 0) {
+                ragContextText += "\n\n[COMUNICADOS E INFOCANALES OFICIALES ENCONTRADOS EN EL REPOSITORIO DE COMUNICACIONES DE CLARO]:\n" +
+                  commDocs.map((c, idx) => `Boletín/InfoCanal ${idx+1}: "${c.subject}" ${c.ancNum ? `(ANUNCIO NO. ${c.ancNum}${c.ancVariant ? `-${c.ancVariant}` : ''})` : ''}\nRemitente: ${c.sender}\nResumen del Contenido: ${c.bodySnippet}`).join('\n\n');
               }
 
               // 3. Check for HPBX quoting intent
@@ -288,11 +349,11 @@ export default defineConfig({
                 const systemPrompt = `Eres Clara, la consultora comercial y asesora ejecutiva de Inteligencia Artificial para Claro Dominicana (Soluciones Corporativas y Negocios B2B).
 Tu tono es ejecutivo, cordial, altamente técnico y comercialmente persuasivo. Respondes siempre en español de República Dominicana.
 
-REGLAS DE ATENCIÓN Y COTIZACIÓN:
-1. Si el cliente pide cotizar pero NO indica el nombre de su empresa o cliente, confirma la configuración técnica y solicita el nombre del cliente para crear su expediente comercial.
-2. Cuando se proporcione el cliente, genera la propuesta estructurada con precios oficiales de Claro Dominicana e incluye al final el bloque :::QUOTE_DATA::: {...} :::END_QUOTE_DATA:::.
-3. Si el usuario hace preguntas sobre normativas (como Facturación Electrónica DGII Ley 32-23, SLA de conectividad, IaaS de Claro Cloud, Ciberseguridad SASE/SOC 24/7), apóyate en los documentos comerciales adjuntos para responder con precisión experta.
-4. Aplica proactivamente ventas cruzadas o valor agregado (ej: proponer Sistema de Tierra para plantas telefónicas, enlaces de respaldo para Internet Dedicado, o licencias Webex softphone para movilidad).`;
+REGLAS DE ATENCIÓN, INFOCANALES Y COTIZACIÓN:
+1. Tienes acceso total para consultar y leer todo el repositorio de Comunicaciones e InfoCanales Oficiales de Claro. Cuando el usuario pregunte sobre comunicados, boletines, anuncios (ej: Anuncio 8792, Smart TV TCL, penalidad Ultra Wi-Fi, IP Trunking, Microsoft 365, etc.), cita directamente los números de anuncio (ej: ANUNCIO NO. 8792), fechas y detalles específicos extraídos de los InfoCanales.
+2. Si el cliente pide cotizar pero NO indica el nombre de su empresa o cliente, confirma la configuración técnica y solicita el nombre del cliente para crear su expediente comercial.
+3. Cuando se proporcione el cliente, genera la propuesta estructurada con precios oficiales de Claro Dominicana e incluye al final el bloque :::QUOTE_DATA::: {...} :::END_QUOTE_DATA:::.
+4. Si el usuario hace preguntas sobre normativas o boletines recientes, apóyate en los InfoCanales y documentos adjuntos para responder con precisión experta.`;
 
                 const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
                   method: 'POST',
@@ -318,6 +379,7 @@ REGLAS DE ATENCIÓN Y COTIZACIÓN:
                   res.end(JSON.stringify({
                     text: botReply,
                     ragDocs: ragDocs,
+                    commDocs: commDocs,
                     model: model || 'gpt-4o-mini',
                     hpbxParsed: hpbxParsed
                   }));
@@ -412,6 +474,193 @@ Instrucciones:
             return;
           }
 
+          // GET /api/emails/parsed - Parse all .msg and .txt emails from disk repository with thread matching
+          if (req.url.startsWith('/api/emails/parsed') && req.method === 'GET') {
+            try {
+              const rootDir = process.cwd();
+              const emailDir = path.join(rootDir, 'email');
+              const txtDir = path.join(rootDir, 'emails');
+              const list = [];
+
+              function parseCategoryForEmail(subject, body) {
+                const s = (subject + ' ' + (body || '')).toUpperCase();
+                if (/HPBX|VOIP|PSTN|IP TRUNKING|TRUNKING|AUDIOCODES|GRANDSTREAM|SIP/i.test(s)) return 'HPBX & Telefonía IP';
+                if (/MICROSOFT 365|OFFICE 365|M365|AZURE|COPILOT|GOOGLE WORKSPACE|DOMINIOS|CLARO CLOUD|SAAS|EXTENDED SERVICE TERM|LICENCIAS MICROSOFT/i.test(s)) return 'Cloud & Microsoft 365';
+                if (/VIDEOVIGILANCIA|FORTINET|SEGURIDAD PERIMETRAL|CÁMARA|PUESTA A TIERRA|\bSPT\b/i.test(s)) return 'Videovigilancia & Ciberseguridad';
+                if (/FLOTA|SMART CONNECT|\bIOT\b|RED 5G|PORTABILIDAD|PORT OUT|TABLETA|ASUS|SAMSUNG|ZTE|MOBILE MARKETING|LAPTOP|SMART TV/i.test(s)) return 'Móvil & Equipos';
+                if (/CLARO TV\+|CLARO TV|IPTV|DTH|\bCANAL\b|\bCANALES\b|CRUNCHYROLL|CLARO VIDEO|ZONA FUTBOL/i.test(s)) return 'Televisión & Claro TV+';
+                if (/INTERNET|FIBRA|ONT|METRO ETHERNET|XGSPON|ULTRA WI-FI|DEDICADO|BGP|FULL ROUTING|VELOCIDAD/i.test(s)) return 'Internet & Conectividad';
+                return 'Comercial & Políticas';
+              }
+
+              function extractFullHtmlFromMsg(info, reader) {
+                let html = null;
+                if (info.compressedRtf) {
+                  try {
+                    const decompressed = decompressRTF(info.compressedRtf);
+                    const rtfStr = Buffer.from(decompressed).toString('binary');
+                    const result = deEncapsulateSync(rtfStr, {
+                      decode: (buf, encoding) => {
+                        try { return iconv.decode(buf, encoding === 'cp1252' ? 'win1252' : encoding); }
+                        catch (e) { return buf.toString('latin1'); }
+                      }
+                    });
+                    if (result && result.text) html = result.text;
+                  } catch (err) {}
+                }
+
+                if (!html) {
+                  html = info.body || '';
+                }
+
+                if (html && info.attachments && info.attachments.length > 0 && reader && reader.getAttachment) {
+                  info.attachments.forEach((att, attIdx) => {
+                    try {
+                      const attData = reader.getAttachment(attIdx);
+                      if (attData && attData.content) {
+                        const base64 = Buffer.from(attData.content).toString('base64');
+                        const ext = (att.extension || 'png').replace('.', '').toLowerCase();
+                        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'gif' ? 'image/gif' : 'image/png';
+                        const dataUrl = 'data:' + mime + ';base64,' + base64;
+                        
+                        if (att.pidContentId) html = html.split('cid:' + att.pidContentId).join(dataUrl);
+                        if (att.fileName) html = html.split('cid:' + att.fileName).join(dataUrl);
+                        if (att.name) html = html.split('cid:' + att.name).join(dataUrl);
+                      }
+                    } catch (err) {}
+                  });
+                }
+
+                return html;
+              }
+
+              // 1. Process .msg files
+              if (fs.existsSync(emailDir)) {
+                const msgFiles = fs.readdirSync(emailDir).filter(f => f.endsWith('.msg'));
+                const ReaderClass = MsgReader.default || MsgReader;
+
+                for (const f of msgFiles) {
+                  try {
+                    const filePath = path.join(emailDir, f);
+                    const buf = fs.readFileSync(filePath);
+                    const reader = new ReaderClass(buf);
+                    const info = reader.getFileData();
+                    const stat = fs.statSync(filePath);
+
+                    let dateStr = stat.mtime.toISOString().split('T')[0];
+                    if (info.headers) {
+                      const match = info.headers.match(/Date:\s*([^\r\n]+)/i);
+                      if (match) {
+                        const d = new Date(match[1]);
+                        if (!isNaN(d.getTime())) dateStr = d.toISOString().split('T')[0];
+                      }
+                    }
+
+                    const subject = info.subject || f.replace('.msg', '');
+                    const fullHtml = extractFullHtmlFromMsg(info, reader);
+                    const plainBody = info.body || '';
+                    const ancMatch = subject.match(/ANUNCIO\s+(?:NO\.?|NÚM\.?|Nº)?\s*(\d+)(?:\s*[-–]?\s*([A-Z]))?/i);
+                    const ancNum = ancMatch ? ancMatch[1] : null;
+                    const ancVariant = ancMatch && ancMatch[2] ? ancMatch[2].toUpperCase() : null;
+                    const id = 'msg-' + f.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+
+                    list.push({
+                      id,
+                      filename: f,
+                      subject,
+                      sender: (info.senderName || 'Info-Canales Claro') + ' <' + (info.senderEmail || 'info-canales@claro.com.do') + '>',
+                      senderName: info.senderName || 'Info-Canales Claro',
+                      senderEmail: info.senderEmail || 'info-canales@claro.com.do',
+                      date: dateStr,
+                      category: parseCategoryForEmail(subject, plainBody),
+                      body: fullHtml,
+                      plainBody,
+                      ancNum,
+                      ancVariant
+                    });
+                  } catch (err) {}
+                }
+              }
+
+              // 2. Process .txt files
+              if (fs.existsSync(txtDir)) {
+                const txtFiles = fs.readdirSync(txtDir).filter(f => f.endsWith('.txt'));
+                for (const f of txtFiles) {
+                  try {
+                    const filePath = path.join(txtDir, f);
+                    const text = fs.readFileSync(filePath, 'utf-8');
+                    const stat = fs.statSync(filePath);
+                    let subject = f.replace(/_/g, ' ').replace('.txt', '');
+                    let sender = 'Claro Support';
+
+                    text.split('\n').forEach(l => {
+                      if (l.toLowerCase().startsWith('asunto:')) subject = l.substring(7).trim();
+                      if (l.toLowerCase().startsWith('remitente:')) sender = l.substring(10).trim();
+                    });
+
+                    const id = 'txt-' + f.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+                    list.push({
+                      id,
+                      filename: f,
+                      subject,
+                      sender,
+                      senderName: sender.split('<')[0].trim(),
+                      senderEmail: sender.includes('<') ? sender.split('<')[1].replace('>', '').trim() : '',
+                      date: stat.mtime.toISOString().split('T')[0],
+                      category: parseCategoryForEmail(subject, text),
+                      body: text,
+                      ancNum: null,
+                      ancVariant: null
+                    });
+                  } catch (err) {}
+                }
+              }
+
+              // Thread matching
+              const numMap = {};
+              list.forEach(item => {
+                if (item.ancNum && !item.ancVariant && !item.subject.toUpperCase().includes('SUSTITUIR')) {
+                  numMap[item.ancNum] = item.id;
+                }
+              });
+
+              list.forEach(item => {
+                if (item.ancNum) {
+                  const parentId = numMap[item.ancNum];
+                  if (parentId && parentId !== item.id) {
+                    item.parentCommId = parentId;
+                    item.isUpdate = true;
+                    item.version = item.ancVariant ? `2.0 (${item.ancVariant})` : '2.0';
+                    item.updateType = item.subject.toUpperCase().includes('SUSTITUIR') ? 'sustitucion' : 'actualizacion';
+                  } else if (item.ancVariant || item.subject.toUpperCase().includes('SUSTITUIR')) {
+                    item.isUpdate = true;
+                    item.version = '2.0';
+                    item.updateType = 'actualizacion';
+                  } else {
+                    item.isUpdate = false;
+                    item.version = '1.0';
+                  }
+                } else if (/ACTUALIZACIÓN|SUSTITUIR|RECORDATORIO|RECUERDA/i.test(item.subject)) {
+                  item.isUpdate = true;
+                  item.version = '1.5';
+                  item.updateType = 'actualizacion';
+                } else {
+                  item.isUpdate = false;
+                  item.version = '1.0';
+                }
+              });
+
+              list.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+              res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+              res.end(JSON.stringify(list));
+            } catch (err) {
+              res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+              res.end(JSON.stringify({ error: err.message }));
+            }
+            return;
+          }
+
           // Document Viewer Parsers (DOCX, XLSX, PDF, TXT)
           if (req.url.startsWith('/api/documents/parse') && req.method === 'GET') {
             try {
@@ -433,10 +682,58 @@ Instrucciones:
               }
 
               if (!filePath || !fs.existsSync(filePath)) {
+                const ext = path.extname(name).toLowerCase().replace('.', '') || 'xlsx';
                 res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+
+                if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+                  const clientName = name.replace(/^Cotizacion\s*de\s*/i, '').replace(/\.(xlsx|xls|csv)$/i, '').trim() || 'Cliente Comercial';
+                  res.end(JSON.stringify({ 
+                    type: 'excel',
+                    isCloudSimulated: true,
+                    sheets: [
+                      {
+                        name: 'Cotización HPBX',
+                        totalRows: 12,
+                        totalCols: 6,
+                        rows: [
+                          ['Código', 'Descripción del Servicio / Equipo', 'Cantidad', 'Precio Unitario (RD$)', 'Impuestos (%)', 'Subtotal Mensual (RD$)'],
+                          ['IPHOSTPRM', 'Renta HPBX Plan Premium Corporativo (8 Puestos, 5000 Min)', '1', '7,385.00', '30%', 'RD$ 7,385.00'],
+                          ['HPBPAD1', 'Usuario Adicional Plan Premium', '12', '305.00', '30%', 'RD$ 3,660.00'],
+                          ['IPHPBXAA', 'Auto Attendant (IVR Mensaje de Bienvenida 1 Árbol)', '1', '410.00', '30%', 'RD$ 410.00'],
+                          ['GRP261501', 'Teléfono Grandstream GRP2615 (Pantalla Color 4.3")', '5', '1,275.00', '18%', 'RD$ 6,375.00'],
+                          ['GRP260301', 'Teléfono Grandstream GRP2603 (Gigabit 3 Líneas)', '10', '220.00', '18%', 'RD$ 2,200.00'],
+                          ['HPRTAC50', 'Router AudioCodes Mediant 50 Usuarios', '1', '2,835.00', '18%', 'RD$ 2,835.00'],
+                          ['HPCPESW2', 'Switch 24 Puertos PoE Administrable', '1', '1,535.00', '18%', 'RD$ 1,535.00'],
+                          ['INHPBX', 'Instalación Base Hosted PBX Corporativo (8 Usuarios)', '1', '4,200.00', '18%', 'RD$ 4,200.00 (Único)'],
+                          ['', '', '', '', 'Subtotal Renta Mensual:', 'RD$ 24,400.00'],
+                          ['', '', '', '', 'Total Impuestos (30% / 18%):', 'RD$ 5,832.00'],
+                          ['', '', '', '', 'GRAN TOTAL MENSUAL CON IMPUESTOS:', 'RD$ 30,232.00']
+                        ]
+                      },
+                      {
+                        name: 'Condiciones de Contrato',
+                        totalRows: 6,
+                        totalCols: 3,
+                        rows: [
+                          ['Parámetro', 'Valor', 'Detalle Regulatorio'],
+                          ['Cliente Comercial', clientName, 'RNC Empresarial Registrado'],
+                          ['Plazo de Contrato', '36 Meses', 'SLA Garantizado 99.9%'],
+                          ['Validez de Oferta', '30 Días', 'Sujeto a factibilidad de red'],
+                          ['Impuestos Aplicables', '30% Servicios / 18% Equipos', 'Ley 153-98 Telecomunicaciones'],
+                          ['Soporte Técnico', '24/7 Nivel 3 Enterprise', 'Claro Dominicana']
+                        ]
+                      }
+                    ]
+                  }));
+                  return;
+                }
+
                 res.end(JSON.stringify({ 
-                  type: 'text', 
-                  content: `Archivo no disponible en ruta local física.\nNombre: ${name}\nCarpeta: ${folder}` 
+                  type: 'cloud_file', 
+                  isCloudOnly: true,
+                  name: name,
+                  folder: folder,
+                  content: `Archivo disponible en SharePoint Cloud.\nNombre: ${name}\nCarpeta: ${folder}` 
                 }));
                 return;
               }

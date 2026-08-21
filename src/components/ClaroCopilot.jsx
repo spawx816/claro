@@ -34,7 +34,8 @@ export default function ClaroCopilot({
   assistantId = '',
   webhookUrl = '',
   openaiModel = 'gpt-4o-mini',
-  mode = 'floating' // 'floating' or 'embedded'
+  mode = 'floating', // 'floating' or 'embedded'
+  onOpenCommunication
 }) {
   const [pendingQuoteDraft, setPendingQuoteDraft] = useState(null);
   const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
@@ -306,7 +307,7 @@ export default function ClaroCopilot({
       }
 
       const resData = await response.json();
-      processBotResponse(resData.text, resData.ragDocs || [], resData.hpbxParsed);
+      processBotResponse(resData.text, resData.ragDocs || [], resData.commDocs || [], resData.hpbxParsed);
     } catch (err) {
       console.warn("AI Chat API error, falling back to local Claro engine:", err);
       simulateBotResponse(userMsgText);
@@ -315,7 +316,7 @@ export default function ClaroCopilot({
     }
   };
 
-  const processBotResponse = (text, ragDocs = [], hpbxParsed = null) => {
+  const processBotResponse = (text, ragDocs = [], commDocs = [], hpbxParsed = null) => {
     let quoteData = null;
     let cleanText = text;
 
@@ -353,7 +354,8 @@ export default function ClaroCopilot({
       text: cleanText,
       quoteData: quoteData,
       quoteObj: quoteObj,
-      ragDocs: ragDocs
+      ragDocs: ragDocs,
+      commDocs: commDocs
     };
     setMessages(prev => [...prev, botMsgObj]);
     saveMessageToDb(botMsgObj);
@@ -562,17 +564,20 @@ export default function ClaroCopilot({
     <>
       {/* Drawer / Window Header */}
       <div style={{ 
-        padding: '16px 20px', 
+        padding: '12px 16px', 
         backgroundColor: 'var(--bg-secondary)', 
         borderBottom: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        width: '100%',
+        boxSizing: 'border-box',
+        gap: '10px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, overflow: 'hidden' }}>
           <div style={{ 
-            width: '38px', 
-            height: '38px', 
+            width: '36px', 
+            height: '36px', 
             borderRadius: 'var(--radius-full)', 
             position: 'relative',
             boxShadow: '0 4px 12px rgba(238, 28, 36, 0.3)',
@@ -594,32 +599,33 @@ export default function ClaroCopilot({
               border: '2px solid var(--bg-secondary)' 
             }}/>
           </div>
-          <div>
+          <div style={{ minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Clara</h3>
-              <span style={{ fontSize: '0.65rem', backgroundColor: 'var(--claro-red-light)', color: 'var(--claro-red)', padding: '2px 6px', borderRadius: 'var(--radius-full)', fontWeight: '700' }}>IA</span>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--text-primary)', margin: 0 }}>Clara Copilot</h3>
+              <span style={{ fontSize: '0.625rem', backgroundColor: 'var(--claro-red-light)', color: 'var(--claro-red)', padding: '2px 6px', borderRadius: 'var(--radius-full)', fontWeight: '800' }}>IA</span>
             </div>
-            <span style={{ fontSize: '0.725rem', color: '#10B981', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Sparkles size={10} /> Copilot Claro Negocios
+            <span style={{ fontSize: '0.7rem', color: '#10B981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+              <Sparkles size={10} /> Claro Negocios B2B
             </span>
           </div>
         </div>
 
         {/* Model Selector & Window Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
             style={{
-              fontSize: '0.72rem',
-              padding: '4px 8px',
+              fontSize: '0.7rem',
+              padding: '4px 6px',
               borderRadius: '8px',
               backgroundColor: 'var(--bg-primary)',
               border: '1px solid var(--border-color)',
               color: 'var(--text-primary)',
               fontWeight: '700',
               cursor: 'pointer',
-              outline: 'none'
+              outline: 'none',
+              maxWidth: '105px'
             }}
             title="Seleccionar Modelo de Inteligencia Artificial"
           >
@@ -632,9 +638,9 @@ export default function ClaroCopilot({
             onClick={handleResetChat}
             className="btn btn-secondary" 
             title="Reiniciar chat"
-            style={{ padding: '6px', borderRadius: 'var(--radius-full)', width: '32px', height: '32px' }}
+            style={{ padding: '4px', borderRadius: 'var(--radius-full)', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={13} />
           </button>
 
           {mode === 'floating' && (
@@ -642,9 +648,9 @@ export default function ClaroCopilot({
               onClick={() => setIsExpanded(!isExpanded)} 
               className="btn btn-secondary" 
               title={isExpanded ? "Reducir ventana" : "Ampliar ventana"}
-              style={{ padding: '6px', borderRadius: 'var(--radius-full)', width: '32px', height: '32px' }}
+              style={{ padding: '4px', borderRadius: 'var(--radius-full)', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              {isExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>
           )}
 
@@ -653,9 +659,9 @@ export default function ClaroCopilot({
               onClick={() => onToggleOpen(false)} 
               className="btn btn-secondary" 
               title="Cerrar chat"
-              style={{ padding: '6px', borderRadius: 'var(--radius-full)', width: '32px', height: '32px', color: 'var(--claro-red)' }}
+              style={{ padding: '4px', borderRadius: 'var(--radius-full)', width: '30px', height: '30px', color: 'var(--claro-red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           )}
         </div>
@@ -666,10 +672,13 @@ export default function ClaroCopilot({
         flex: 1, 
         padding: '16px', 
         overflowY: 'auto', 
+        overflowX: 'hidden',
         display: 'flex', 
         flexDirection: 'column', 
         gap: '14px',
-        backgroundColor: 'var(--bg-primary)'
+        backgroundColor: 'var(--bg-primary)',
+        width: '100%',
+        boxSizing: 'border-box'
       }}>
         {messages.map(msg => (
           <div 
@@ -678,7 +687,10 @@ export default function ClaroCopilot({
               display: 'flex', 
               flexDirection: 'column',
               alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '90%',
+              maxWidth: '95%',
+              width: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box',
               alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start'
             }}
           >
@@ -686,7 +698,10 @@ export default function ClaroCopilot({
               display: 'flex', 
               alignItems: 'flex-start', 
               gap: '8px', 
-              flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row' 
+              flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row',
+              maxWidth: '100%',
+              minWidth: 0,
+              boxSizing: 'border-box'
             }}>
               <div style={{ 
                 width: '28px', 
@@ -718,15 +733,20 @@ export default function ClaroCopilot({
                 border: msg.sender === 'user' ? 'none' : '1px solid var(--border-color)',
                 borderTopRightRadius: msg.sender === 'user' ? '0' : undefined,
                 borderTopLeftRadius: msg.sender === 'bot' ? '0' : undefined,
+                maxWidth: '100%',
+                minWidth: 0,
+                boxSizing: 'border-box',
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere'
               }}>
                 {msg.sender === 'user' ? (
-                  <span style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</span>
+                  <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</span>
                 ) : (
-                  <div className="chat-markdown-body" style={{ width: '100%' }}>
+                  <div className="chat-markdown-body" style={{ width: '100%', minWidth: 0, boxSizing: 'border-box', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        p: ({ children }) => <p style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '0.875rem' }}>{children}</p>,
+                        p: ({ children }) => <p style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '0.875rem', wordBreak: 'break-word' }}>{children}</p>,
                         strong: ({ children }) => <strong style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{children}</strong>,
                         em: ({ children }) => <em style={{ color: 'var(--text-secondary)' }}>{children}</em>,
                         ul: ({ children }) => <ul style={{ paddingLeft: '18px', margin: '8px 0', fontSize: '0.85rem' }}>{children}</ul>,
@@ -735,8 +755,8 @@ export default function ClaroCopilot({
                         h2: ({ children }) => <h4 style={{ fontSize: '0.95rem', fontWeight: '700', margin: '10px 0 4px 0', color: 'var(--text-primary)' }}>{children}</h4>,
                         h3: ({ children }) => <h5 style={{ fontSize: '0.88rem', fontWeight: '700', margin: '10px 0 4px 0', color: 'var(--claro-red)' }}>{children}</h5>,
                         table: ({ children }) => (
-                          <div style={{ overflowX: 'auto', margin: '10px 0', borderRadius: '8px', border: '1px solid var(--border-color)', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem', minWidth: '380px' }}>
+                          <div style={{ overflowX: 'auto', maxWidth: '100%', margin: '10px 0', borderRadius: '8px', border: '1px solid var(--border-color)', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem', minWidth: '320px' }}>
                               {children}
                             </table>
                           </div>
@@ -746,7 +766,7 @@ export default function ClaroCopilot({
                         tr: ({ children }) => <tr style={{ borderBottom: '1px solid var(--border-color)' }}>{children}</tr>,
                         th: ({ children }) => <th style={{ padding: '6px 10px', fontWeight: '700', textAlign: 'left', borderRight: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>{children}</th>,
                         td: ({ children }) => <td style={{ padding: '6px 10px', borderRight: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>{children}</td>,
-                        code: ({ children }) => <code style={{ backgroundColor: 'rgba(238, 28, 36, 0.08)', color: 'var(--claro-red)', padding: '2px 5px', borderRadius: '4px', fontSize: '0.8em', fontWeight: '600', fontFamily: 'monospace' }}>{children}</code>,
+                        code: ({ children }) => <code style={{ backgroundColor: 'rgba(238, 28, 36, 0.08)', color: 'var(--claro-red)', padding: '2px 5px', borderRadius: '4px', fontSize: '0.8em', fontWeight: '600', fontFamily: 'monospace', wordBreak: 'break-all' }}>{children}</code>,
                         blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid var(--claro-red)', paddingLeft: '10px', margin: '8px 0', color: 'var(--text-secondary)', fontStyle: 'italic' }}>{children}</blockquote>
                       }}
                     >
@@ -755,15 +775,62 @@ export default function ClaroCopilot({
 
                     {/* RAG SOURCED DOCUMENTS BADGE */}
                     {msg.ragDocs && msg.ragDocs.length > 0 && (
-                      <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '8px', backgroundColor: 'rgba(238, 28, 36, 0.04)', border: '1px solid rgba(238, 28, 36, 0.15)', fontSize: '0.73rem', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '8px', backgroundColor: 'rgba(238, 28, 36, 0.04)', border: '1px solid rgba(238, 28, 36, 0.15)', fontSize: '0.73rem', display: 'flex', flexDirection: 'column', gap: '5px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}>
                         <span style={{ fontWeight: '700', color: 'var(--claro-red)', display: 'flex', alignItems: 'center', gap: '5px' }}>
                           📚 Fuentes Técnicas y Comerciales Consultadas ({msg.ragDocs.length}):
                         </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', maxWidth: '100%' }}>
                           {msg.ragDocs.map((doc, idx) => (
-                            <span key={idx} style={{ backgroundColor: 'var(--bg-primary)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.7rem' }} title={doc.aiSummary || doc.title}>
+                            <span key={idx} style={{ backgroundColor: 'var(--bg-primary)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.7rem', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={doc.aiSummary || doc.title}>
                               📄 {doc.title || doc.name}
                             </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* RAG SOURCED INFOCANALES / COMUNICADOS BADGE */}
+                    {msg.commDocs && msg.commDocs.length > 0 && (
+                      <div style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(37, 99, 235, 0.06)', border: '1px solid rgba(37, 99, 235, 0.25)', fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}>
+                        <span style={{ fontWeight: '800', color: '#1E40AF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          📢 Boletines e InfoCanales Oficiales Consultados ({msg.commDocs.length}):
+                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '100%' }}>
+                          {msg.commDocs.map((comm, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-primary)', padding: '6px 10px', borderRadius: '6px', border: '1px solid #BFDBFE', color: '#1E40AF', gap: '8px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                                <span style={{ fontWeight: '800', color: '#2563EB', flexShrink: 0, fontSize: '0.7rem' }}>
+                                  {comm.ancNum ? `ANUNCIO NO. ${comm.ancNum}${comm.ancVariant ? `-${comm.ancVariant}` : ''}` : 'BOLETÍN'}
+                                </span>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)', fontSize: '0.725rem', flex: 1, minWidth: 0 }} title={comm.subject}>
+                                  {comm.subject}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (onOpenCommunication) onOpenCommunication(comm);
+                                }}
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '99px',
+                                  fontSize: '0.675rem',
+                                  fontWeight: '800',
+                                  backgroundColor: '#2563EB',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  flexShrink: 0,
+                                  boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Abrir y leer este boletín completo en la pestaña Comunicaciones"
+                              >
+                                Abrir Boletín ↗
+                              </button>
+                            </div>
                           ))}
                         </div>
                       </div>

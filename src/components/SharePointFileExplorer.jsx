@@ -44,6 +44,17 @@ import {
   initialSharePointDocuments 
 } from '../data/sharepointDocuments';
 
+// Helper to convert 0-indexed column integer to Excel column letters (0 -> A, 25 -> Z, 26 -> AA...)
+const getExcelColumnName = (index) => {
+  let name = '';
+  let i = index;
+  while (i >= 0) {
+    name = String.fromCharCode((i % 26) + 65) + name;
+    i = Math.floor(i / 26) - 1;
+  }
+  return name;
+};
+
 export default function SharePointFileExplorer({ 
   apiKey, 
   onAskCopilot, 
@@ -139,9 +150,9 @@ export default function SharePointFileExplorer({
       if (!searchQuery.trim()) return true;
 
       const q = searchQuery.toLowerCase().trim();
-      const matchName = doc.name.toLowerCase().includes(q);
-      const matchTitle = doc.title.toLowerCase().includes(q);
-      const matchCategory = doc.category.toLowerCase().includes(q);
+      const matchName = (doc.name || '').toLowerCase().includes(q);
+      const matchTitle = (doc.title || '').toLowerCase().includes(q);
+      const matchCategory = (doc.category || '').toLowerCase().includes(q);
       const matchTags = (doc.tags || []).some(t => t.toLowerCase().includes(q));
       const matchSummary = (doc.aiSummary || '').toLowerCase().includes(q);
       const matchContent = (doc.contentPreview || '').toLowerCase().includes(q);
@@ -165,6 +176,34 @@ export default function SharePointFileExplorer({
       return 0;
     });
   }, [documents, selectedCategory, selectedFolder, selectedExtension, searchQuery, searchMode, sortBy, sortOrder]);
+
+  // Pagination & In-Memory Cache Optimization
+  const [currentPage, setCurrentPage] = useState(1);
+  const [excelPage, setExcelPage] = useState(1);
+  const parsedCacheRef = React.useRef({});
+  const pageSize = 16;
+
+  // Reset pagination to page 1 on filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, selectedFolder, selectedExtension, searchQuery, searchMode, sortBy, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredDocuments.length / pageSize));
+  
+  const paginatedDocuments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredDocuments.slice(start, start + pageSize);
+  }, [filteredDocuments, currentPage, pageSize]);
+
+  // Memoized Folder Counts for O(1) sidebar rendering
+  const folderCounts = useMemo(() => {
+    const counts = {};
+    documents.forEach(d => {
+      if (d.folder) counts[d.folder] = (counts[d.folder] || 0) + 1;
+      if (d.category) counts[d.category] = (counts[d.category] || 0) + 1;
+    });
+    return counts;
+  }, [documents]);
 
   // Sync Action
   const handleSyncSharePoint = async () => {
@@ -216,13 +255,12 @@ export default function SharePointFileExplorer({
 
     let realTextContent = doc.contentPreview;
 
-    // 1. Fetch real parsed content from server (DOCX HTML, Excel sheets, PDF streams)
+    // 1. Fetch real parsed content from server (with instant cache hit)
+    const cacheKey = `${doc.name}_${doc.folder || ''}`;
     try {
-      const parseRes = await fetch(`/api/documents/parse?name=${encodeURIComponent(doc.name)}&folder=${encodeURIComponent(doc.folder)}`);
-      if (parseRes.ok) {
-        const parsed = await parseRes.json();
+      if (parsedCacheRef.current[cacheKey]) {
+        const parsed = parsedCacheRef.current[cacheKey];
         setParsedDocData(parsed);
-
         if (parsed.type === 'docx' && parsed.html) {
           realTextContent = parsed.html.replace(/<[^>]+>/g, ' ').substring(0, 3000);
         } else if (parsed.type === 'excel' && parsed.sheets && parsed.sheets.length > 0) {
@@ -230,6 +268,22 @@ export default function SharePointFileExplorer({
           realTextContent = `Hojas de cálculo: ${parsed.sheets.map(s => s.name).join(', ')}\nExtracto:\n${sampleRows}`;
         } else if (parsed.type === 'text' && parsed.content) {
           realTextContent = parsed.content.substring(0, 3000);
+        }
+      } else {
+        const parseRes = await fetch(`/api/documents/parse?name=${encodeURIComponent(doc.name)}&folder=${encodeURIComponent(doc.folder || '')}`);
+        if (parseRes.ok) {
+          const parsed = await parseRes.json();
+          parsedCacheRef.current[cacheKey] = parsed;
+          setParsedDocData(parsed);
+
+          if (parsed.type === 'docx' && parsed.html) {
+            realTextContent = parsed.html.replace(/<[^>]+>/g, ' ').substring(0, 3000);
+          } else if (parsed.type === 'excel' && parsed.sheets && parsed.sheets.length > 0) {
+            const sampleRows = parsed.sheets[0].rows.slice(0, 20).map(r => Array.isArray(r) ? r.join(' | ') : '').join('\n');
+            realTextContent = `Hojas de cálculo: ${parsed.sheets.map(s => s.name).join(', ')}\nExtracto:\n${sampleRows}`;
+          } else if (parsed.type === 'text' && parsed.content) {
+            realTextContent = parsed.content.substring(0, 3000);
+          }
         }
       }
     } catch (parseErr) {
@@ -792,7 +846,7 @@ export default function SharePointFileExplorer({
           {/* GRID VIEW */}
           {viewMode === 'grid' && filteredDocuments.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '16px' }}>
-              {filteredDocuments.map(doc => {
+              {paginatedDocuments.map(doc => {
                 const badge = getFileBadge(doc.extension);
                 return (
                   <div 
@@ -936,7 +990,7 @@ export default function SharePointFileExplorer({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredDocuments.map(doc => {
+                    {paginatedDocuments.map(doc => {
                       const badge = getFileBadge(doc.extension);
                       return (
                         <tr 
@@ -1001,6 +1055,39 @@ export default function SharePointFileExplorer({
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* PAGINATION CONTROLS BAR */}
+          {filteredDocuments.length > pageSize && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '10px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Mostrando <strong style={{ color: 'var(--text-primary)' }}>{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, filteredDocuments.length)}</strong> de <strong style={{ color: 'var(--text-primary)' }}>{filteredDocuments.length}</strong> documentos
+              </span>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.785rem', borderRadius: 'var(--radius-md)', opacity: currentPage === 1 ? 0.5 : 1, cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
+                >
+                  ◄ Anterior
+                </button>
+                
+                <span style={{ fontSize: '0.8rem', fontWeight: '700', padding: '0 8px', color: 'var(--text-primary)' }}>
+                  Página {currentPage} de {totalPages}
+                </span>
+
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.785rem', borderRadius: 'var(--radius-md)', opacity: currentPage === totalPages ? 0.5 : 1, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
+                >
+                  Siguiente ►
+                </button>
               </div>
             </div>
           )}
@@ -1154,16 +1241,16 @@ export default function SharePointFileExplorer({
                       </div>
 
                       {/* In-Sheet Search */}
-                      <div style={{ position: 'relative', width: '200px' }}>
+                      <div style={{ position: 'relative', width: '220px' }}>
                         <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                         <input 
                           type="text"
                           value={excelSearchQuery}
                           onChange={(e) => setExcelSearchQuery(e.target.value)}
-                          placeholder="Filtrar celdas..."
+                          placeholder="Filtrar celdas en tiempo real..."
                           style={{
                             width: '100%',
-                            padding: '4px 8px 4px 26px',
+                            padding: '5px 8px 5px 26px',
                             borderRadius: 'var(--radius-md)',
                             border: '1px solid var(--border-color)',
                             backgroundColor: 'var(--bg-primary)',
@@ -1174,61 +1261,164 @@ export default function SharePointFileExplorer({
                       </div>
                     </div>
 
-                    {/* Sheet Grid Table */}
-                    {parsedDocData.sheets && parsedDocData.sheets[activeSheetIndex] && (
-                      <div style={{ 
-                        border: '1px solid var(--border-color)', 
-                        borderRadius: 'var(--radius-md)', 
-                        overflow: 'auto', 
-                        maxHeight: '420px', 
-                        backgroundColor: 'var(--bg-primary)' 
-                      }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.785rem', textAlign: 'left' }}>
-                          <tbody>
-                            {parsedDocData.sheets[activeSheetIndex].rows
-                              .filter(row => {
-                                if (!excelSearchQuery.trim()) return true;
-                                const q = excelSearchQuery.toLowerCase();
-                                return (row || []).some(cell => String(cell).toLowerCase().includes(q));
-                              })
-                              .map((row, rIdx) => {
-                                const isHeader = rIdx === 0;
-                                return (
-                                  <tr 
-                                    key={rIdx}
-                                    style={{
-                                      backgroundColor: isHeader ? 'rgba(238, 28, 36, 0.06)' : (rIdx % 2 === 0 ? 'var(--bg-card)' : 'transparent'),
-                                      borderBottom: '1px solid var(--border-color)',
-                                      fontWeight: isHeader ? '700' : 'normal'
-                                    }}
-                                  >
-                                    <td style={{ padding: '6px 8px', borderRight: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.7rem', width: '36px', textAlign: 'center', userSelect: 'none', backgroundColor: 'var(--bg-primary)' }}>
-                                      {rIdx + 1}
-                                    </td>
-                                    {(row || []).map((cell, cIdx) => (
-                                      <td 
-                                        key={cIdx} 
-                                        style={{ 
-                                          padding: '6px 10px', 
-                                          borderRight: '1px solid var(--border-color)', 
-                                          color: isHeader ? 'var(--claro-red)' : 'var(--text-primary)',
-                                          whiteSpace: 'nowrap',
-                                          maxWidth: '300px',
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis'
-                                        }}
-                                        title={String(cell || '')}
-                                      >
-                                        {String(cell !== undefined && cell !== null ? cell : '')}
+                    {/* Sheet Grid Table with Sticky Headers (A, B, C...) & Row Numbers */}
+                    {parsedDocData.sheets && parsedDocData.sheets[activeSheetIndex] && (() => {
+                      const currentSheet = parsedDocData.sheets[activeSheetIndex];
+                      const allRows = currentSheet.rows || [];
+                      const filteredRowsWithIdx = allRows
+                        .map((row, origIdx) => ({ row, origIdx }))
+                        .filter(({ row }) => {
+                          if (!excelSearchQuery.trim()) return true;
+                          const q = excelSearchQuery.toLowerCase();
+                          return (row || []).some(cell => String(cell || '').toLowerCase().includes(q));
+                        });
+
+                      // Determine maximum number of columns across rows
+                      const maxCols = Math.max(...allRows.map(r => (r || []).length), 0);
+                      const endColLetter = maxCols > 0 ? getExcelColumnName(maxCols - 1) : '';
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {/* Info Status Bar */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.725rem', color: 'var(--text-muted)', padding: '0 2px' }}>
+                            <span>
+                              Mostrando <strong style={{ color: 'var(--text-primary)' }}>{filteredRowsWithIdx.length}</strong> de <strong style={{ color: 'var(--text-primary)' }}>{currentSheet.totalRows || allRows.length}</strong> filas {excelSearchQuery && `(filtradas por "${excelSearchQuery}")`}
+                            </span>
+                            <span>
+                              Estructura: <strong style={{ color: 'var(--text-primary)' }}>{maxCols}</strong> columnas {maxCols > 0 && `(A - ${endColLetter})`}
+                            </span>
+                          </div>
+
+                          {/* Scrollable Container with Sticky Table */}
+                          <div style={{ 
+                            border: '1px solid var(--border-color)', 
+                            borderRadius: 'var(--radius-md)', 
+                            overflow: 'auto', 
+                            maxHeight: '440px', 
+                            backgroundColor: 'var(--bg-primary)',
+                            boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)'
+                          }}>
+                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.785rem', textAlign: 'left' }}>
+                              {/* STICKY COLUMN HEADERS (A, B, C...) */}
+                              <thead>
+                                <tr>
+                                  {/* Top-Left Corner Cell pinned both top & left */}
+                                  <th style={{ 
+                                    position: 'sticky', 
+                                    top: 0, 
+                                    left: 0, 
+                                    zIndex: 35, 
+                                    backgroundColor: 'var(--bg-card)', 
+                                    borderRight: '1px solid var(--border-color)', 
+                                    borderBottom: '2px solid var(--border-color)', 
+                                    padding: '6px 8px', 
+                                    width: '42px', 
+                                    minWidth: '42px',
+                                    textAlign: 'center', 
+                                    color: 'var(--text-muted)', 
+                                    fontSize: '0.7rem', 
+                                    fontWeight: '800', 
+                                    userSelect: 'none' 
+                                  }}>
+                                    #
+                                  </th>
+
+                                  {/* Column Letter Headers */}
+                                  {Array.from({ length: maxCols }).map((_, cIdx) => (
+                                    <th 
+                                      key={cIdx} 
+                                      style={{ 
+                                        position: 'sticky', 
+                                        top: 0, 
+                                        zIndex: 20, 
+                                        backgroundColor: 'var(--bg-card)', 
+                                        borderRight: '1px solid var(--border-color)', 
+                                        borderBottom: '2px solid var(--border-color)', 
+                                        padding: '6px 10px', 
+                                        color: 'var(--text-secondary)', 
+                                        fontSize: '0.725rem', 
+                                        fontWeight: '700', 
+                                        textAlign: 'center', 
+                                        userSelect: 'none',
+                                        minWidth: '110px',
+                                        whiteSpace: 'nowrap'
+                                      }}
+                                    >
+                                      {getExcelColumnName(cIdx)}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+
+                              {/* TABLE BODY */}
+                              <tbody>
+                                {filteredRowsWithIdx.slice(0, 100).map(({ row, origIdx }) => {
+                                  const isHeader = origIdx === 0;
+                                  return (
+                                    <tr 
+                                      key={origIdx} 
+                                      style={{
+                                        backgroundColor: isHeader ? 'rgba(238, 28, 36, 0.07)' : (origIdx % 2 === 0 ? 'var(--bg-card)' : 'transparent'),
+                                        fontWeight: isHeader ? '700' : 'normal'
+                                      }}
+                                    >
+                                      {/* STICKY ROW NUMBER CELL pinned to the left */}
+                                      <td style={{ 
+                                        position: 'sticky', 
+                                        left: 0, 
+                                        zIndex: 10, 
+                                        padding: '6px 8px', 
+                                        borderRight: '1px solid var(--border-color)', 
+                                        borderBottom: '1px solid var(--border-color)', 
+                                        color: isHeader ? 'var(--claro-red)' : 'var(--text-muted)', 
+                                        fontSize: '0.7rem', 
+                                        width: '42px', 
+                                        minWidth: '42px',
+                                        textAlign: 'center', 
+                                        userSelect: 'none', 
+                                        backgroundColor: isHeader ? 'rgba(238, 28, 36, 0.08)' : (origIdx % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-primary)'),
+                                        fontWeight: '700'
+                                      }}>
+                                        {origIdx + 1}
                                       </td>
-                                    ))}
-                                  </tr>
-                                );
-                              })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+
+                                      {/* CELL DATA */}
+                                      {Array.from({ length: maxCols }).map((_, cIdx) => {
+                                        const cellVal = (row || [])[cIdx];
+                                        const cellStr = cellVal !== undefined && cellVal !== null ? String(cellVal) : '';
+                                        // Detect if numerical or currency value for right alignment
+                                        const isNumeric = cellStr.trim() !== '' && !isNaN(Number(cellStr.replace(/[^0-9.-]+/g, ''))) && !/[a-zA-Z]{3,}/.test(cellStr);
+
+                                        return (
+                                          <td 
+                                            key={cIdx} 
+                                            style={{ 
+                                              padding: '6px 10px', 
+                                              borderRight: '1px solid var(--border-color)', 
+                                              borderBottom: '1px solid var(--border-color)', 
+                                              color: isHeader ? 'var(--claro-red)' : 'var(--text-primary)',
+                                              whiteSpace: 'nowrap',
+                                              maxWidth: '280px',
+                                              overflow: 'hidden',
+                                              textOverflow: 'ellipsis',
+                                              textAlign: isNumeric && !isHeader ? 'right' : 'left',
+                                              fontFamily: isNumeric && !isHeader ? 'Consolas, Monaco, monospace' : 'inherit'
+                                            }}
+                                            title={cellStr}
+                                          >
+                                            {cellStr}
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1270,34 +1460,88 @@ export default function SharePointFileExplorer({
                   </div>
                 )}
 
-                {/* 4. PLAIN TEXT / FALLBACK VIEWER */}
-                {(!parsedDocData || parsedDocData.type === 'text') && (
+                {/* 4. CLOUD-ONLY FILE OR PLAIN TEXT FALLBACK VIEWER */}
+                {parsedDocData?.type === 'cloud_file' && (
                   <div style={{
-                    padding: '16px',
+                    padding: '24px',
                     borderRadius: 'var(--radius-md)',
                     backgroundColor: 'var(--bg-primary)',
-                    border: '1px solid var(--border-color)',
-                    fontFamily: 'monospace',
-                    fontSize: '0.825rem',
-                    lineHeight: '1.5',
-                    color: 'var(--text-primary)',
-                    whiteSpace: 'pre-wrap',
-                    maxHeight: '420px',
-                    overflowY: 'auto'
+                    border: '1px dashed var(--border-color)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textAlign: 'center',
+                    gap: '14px',
+                    minHeight: '260px'
                   }}>
-                    {parsedDocData?.content || previewDoc.contentPreview || 'Sin contenido para previsualizar.'}
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(238, 28, 36, 0.1)',
+                      color: 'var(--claro-red)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <HardDrive size={28} />
+                    </div>
+                    <div>
+                      <h4 style={{ fontSize: '1rem', fontWeight: '800', margin: '0 0 6px', color: 'var(--text-primary)' }}>
+                        Documento Almacenado en SharePoint Cloud
+                      </h4>
+                      <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', margin: 0, maxWidth: '420px', lineHeight: '1.5' }}>
+                        Este archivo se encuentra disponible en la biblioteca de SharePoint / Teams. Puedes abrirlo directamente en la nube o consultar sus especificaciones con Clara Copilot.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <a 
+                        href={previewDoc.sharepointUrl || SHAREPOINT_CONFIG.webUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="btn btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '8px 16px' }}
+                      >
+                        <Share2 size={15} /> Abrir en SharePoint <ExternalLink size={13} />
+                      </a>
+                    </div>
                   </div>
                 )}
 
-                {/* Key Takeaways Box */}
+                {(!parsedDocData || parsedDocData.type === 'text') && (
+                  <div style={{
+                    padding: '18px 20px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '0.85rem',
+                    lineHeight: '1.6',
+                    color: 'var(--text-primary)',
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: '420px',
+                    overflowY: 'auto',
+                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.03)'
+                  }}>
+                    {parsedDocData?.content || previewDoc.contentPreview || 'Sin contenido adicional para previsualizar.'}
+                  </div>
+                )}
+
+                {/* Key Takeaways Box (Polished Card UI) */}
                 {previewDoc.keyTakeaways && previewDoc.keyTakeaways.length > 0 && (
-                  <div style={{ paddingTop: '8px' }}>
-                    <h5 style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-primary)', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CheckCircle2 size={14} color="#10b981" /> Metadatos & Puntos Clave:
+                  <div style={{ 
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
+                    marginTop: '4px'
+                  }}>
+                    <h5 style={{ fontSize: '0.825rem', fontWeight: '800', color: 'var(--text-primary)', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle2 size={16} color="#10b981" /> Metadatos & Puntos Clave:
                     </h5>
-                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.45' }}>
+                    <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
                       {previewDoc.keyTakeaways.map((item, idx) => (
-                        <li key={idx} style={{ marginBottom: '4px' }}>{item}</li>
+                        <li key={idx} style={{ marginBottom: '6px' }}>{item}</li>
                       ))}
                     </ul>
                   </div>

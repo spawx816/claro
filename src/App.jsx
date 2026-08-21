@@ -95,10 +95,36 @@ export default function App() {
   // Prefilled query trigger and visibility for Copilot
   const [copilotTriggerQuery, setCopilotTriggerQuery] = useState(null);
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [selectedCommForView, setSelectedCommForView] = useState(null);
 
-  // Sync basic data to localstorage
+  const handleOpenCommunication = (comm) => {
+    setSelectedCommForView(comm);
+    setActiveTab('comms');
+  };
+
+  // Load official emails parsed from disk repository on mount
   useEffect(() => {
-    localStorage.setItem('claro_comms', JSON.stringify(communications));
+    fetch('/api/emails/parsed')
+      .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Failed to load parsed emails');
+      })
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setCommunications(data);
+        }
+      })
+      .catch(err => console.warn('Using local fallback communications:', err));
+  }, []);
+
+  // Sync basic data to localstorage with error handling
+  useEffect(() => {
+    try {
+      const lightComms = communications.map(({ body, ...rest }) => rest);
+      localStorage.setItem('claro_comms', JSON.stringify(lightComms));
+    } catch (e) {
+      console.warn('LocalStorage quota exceeded for claro_comms:', e);
+    }
   }, [communications]);
 
   useEffect(() => {
@@ -519,6 +545,7 @@ export default function App() {
             emailPort={emailPort}
             emailPassword={decryptedEmailPassword}
             emailSecure={emailSecure}
+            targetCommId={selectedCommForView}
           />
         )}
 
@@ -559,6 +586,7 @@ export default function App() {
             webhookUrl={webhookUrl}
             openaiModel={openaiModel}
             mode="embedded"
+            onOpenCommunication={handleOpenCommunication}
           />
         )}
         {activeTab === 'profile' && (
@@ -805,6 +833,7 @@ export default function App() {
         webhookUrl={webhookUrl}
         openaiModel={openaiModel}
         mode="floating"
+        onOpenCommunication={handleOpenCommunication}
       />
 
       {/* Footer */}

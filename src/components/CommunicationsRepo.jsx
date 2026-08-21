@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Calendar, ChevronRight, Clock, RefreshCw, FileText, ArrowRight, CornerDownRight, Tag, Mail, Inbox, Check, AlertCircle, Plus, Send, Bot } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Calendar, ChevronRight, Clock, RefreshCw, FileText, ArrowRight, CornerDownRight, Tag, Mail, Inbox, Check, AlertCircle, Plus, Send, Bot, Grid, List, Layers, Filter, GitBranch } from 'lucide-react';
 
 const stripHtml = (html) => {
   if (!html) return '';
@@ -184,12 +184,47 @@ export default function CommunicationsRepo({
   emailHost,
   emailPort,
   emailPassword,
-  emailSecure
+  emailSecure,
+  targetCommId
 }) {
   const [activeSubView, setActiveSubView] = useState('repository');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
   const [activeCommId, setActiveCommId] = useState(null);
+  const [viewMode, setViewMode] = useState('timeline'); // 'timeline' | 'cards' | 'list'
+
+  // Sync targetCommId when selected externally from Clara Copilot
+  useEffect(() => {
+    if (targetCommId && communications && communications.length > 0) {
+      // Find matching comm by id, ancNum, or title substring
+      const found = communications.find(c => 
+        c.id === targetCommId || 
+        (c.ancNum && String(c.ancNum) === String(targetCommId)) ||
+        (targetCommId.ancNum && c.ancNum && String(c.ancNum) === String(targetCommId.ancNum)) ||
+        (targetCommId.subject && c.subject && c.subject.toLowerCase() === targetCommId.subject.toLowerCase())
+      );
+      if (found) {
+        setActiveCommId(found.id);
+        setActiveSubView('repository');
+      } else if (typeof targetCommId === 'object' && targetCommId.id) {
+        setActiveCommId(targetCommId.id);
+        setActiveSubView('repository');
+      }
+    }
+  }, [targetCommId, communications]);
+
+  // Categories list
+  const categories = [
+    'Todos',
+    '⚡ Solo Modificados (v2.0)',
+    'Cloud & Microsoft 365',
+    'Internet & Conectividad',
+    'HPBX & Telefonía IP',
+    'Móvil & Equipos',
+    'Televisión & Claro TV+',
+    'Videovigilancia & Ciberseguridad',
+    'Comercial & Políticas'
+  ];
 
   const renderEmailBody = (bodyText, maxHeight = '260px') => {
     const isHTML = /<[a-z][\s\S]*>/i.test(bodyText) || bodyText.includes('</div>') || bodyText.includes('</p>') || bodyText.includes('<br') || bodyText.includes('</td>');
@@ -280,11 +315,13 @@ export default function CommunicationsRepo({
 
   // Sync to localstorage
   useEffect(() => {
-    localStorage.setItem('claro_inbox_emails_history', JSON.stringify(inboxEmails));
+    try {
+      const lightInbox = inboxEmails.map(({ body, ...rest }) => rest);
+      localStorage.setItem('claro_inbox_emails_history', JSON.stringify(lightInbox));
+    } catch (e) {
+      console.warn('LocalStorage quota exceeded for claro_inbox_emails_history:', e);
+    }
   }, [inboxEmails]);
-
-  // Categories list
-  const categories = ['Todos', 'Cloud', 'Móvil', 'Telefonía IP', 'Conectividad', 'Seguridad'];
 
   // Local rule-based classification logic
   const classifyEmailLocally = (email) => {
@@ -513,7 +550,9 @@ ${stripHtml(email.body)}`;
         }
 
         if (newlyProcessedLogs.length > 0) {
-          localStorage.setItem('claro_processed_filenames', JSON.stringify(processedFilenames));
+          try {
+            localStorage.setItem('claro_processed_filenames', JSON.stringify(processedFilenames));
+          } catch (e) {}
           setInboxEmails(prev => [...newlyProcessedLogs, ...prev]);
           if (!silent) {
             setNotificationMsg(messages.join('\n'));
@@ -625,41 +664,31 @@ ${stripHtml(email.body)}`;
 
 
 
-  // Filter communications
-  const filteredComms = communications.filter(comm => {
-    const matchesCategory = selectedCategory === 'Todos' || comm.category === selectedCategory;
-    const matchesProfile = profileInterests.length === 0 || profileInterests.includes(comm.category);
-    const matchesSearch = comm.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          comm.body.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          comm.category.toLowerCase().includes(searchTerm.toLowerCase());
-                          
-    return matchesCategory && matchesProfile && matchesSearch;
-  });
-
-  const sortedComms = [...filteredComms].sort((a, b) => new Date(b.date) - new Date(a.date));
-
+  // Timeline history resolver
   const getUpdateTimeline = (comm) => {
-    let timeline = [comm];
-    let current = comm;
-    while (current && current.updatesId) {
-      const parent = communications.find(c => c.id === current.updatesId);
-      if (parent) {
-        timeline.unshift(parent);
-        current = parent;
-      } else {
-        break;
-      }
-    }
+    if (!comm) return [];
+    
+    const num = comm.ancNum;
+    const matches = (communications || []).filter(c => {
+      if (c.id === comm.id) return true;
+      if (num && c.ancNum && c.ancNum === num) return true;
+      if (c.parentCommId === comm.id || comm.parentCommId === c.id) return true;
+      if (c.updatesId === comm.id || comm.updatesId === c.id) return true;
+      if (c.parentCommId && comm.parentCommId && c.parentCommId === comm.parentCommId) return true;
+      if (c.updatesId && comm.updatesId && c.updatesId === comm.updatesId) return true;
+      return false;
+    });
 
-    current = comm;
-    let nextChild = communications.find(c => c.updatesId === current.id);
-    while (nextChild) {
-      timeline.push(nextChild);
-      current = nextChild;
-      nextChild = communications.find(c => c.updatesId === current.id);
-    }
+    const uniqueMap = new Map();
+    matches.forEach(m => uniqueMap.set(m.id, m));
+    const uniqueList = Array.from(uniqueMap.values());
 
-    return Array.from(new Set(timeline));
+    return uniqueList.sort((a, b) => {
+      if (!a.ancVariant && b.ancVariant) return -1;
+      if (a.ancVariant && !b.ancVariant) return 1;
+      if (a.ancVariant && b.ancVariant) return a.ancVariant.localeCompare(b.ancVariant);
+      return new Date(a.date) - new Date(b.date);
+    });
   };
 
 
@@ -672,14 +701,325 @@ ${stripHtml(email.body)}`;
 
 
   const getCategoryColor = (cat) => {
-    switch(cat) {
-      case 'Cloud': return '#2563EB';
-      case 'Móvil': return '#10B981';
-      case 'Telefonía IP': return '#D97706';
-      case 'Conectividad': return '#8B5CF6';
-      case 'Seguridad': return '#EF4444';
-      default: return 'var(--text-secondary)';
+    if (!cat) return 'var(--text-secondary)';
+    if (cat.includes('Cloud')) return '#2563EB';
+    if (cat.includes('Internet') || cat.includes('Conectividad')) return '#8B5CF6';
+    if (cat.includes('HPBX') || cat.includes('Telefonía')) return '#D97706';
+    if (cat.includes('Móvil') || cat.includes('Equipos')) return '#10B981';
+    if (cat.includes('Televisión') || cat.includes('TV')) return '#EC4899';
+    if (cat.includes('Videovigilancia') || cat.includes('Seguridad')) return '#EF4444';
+    if (cat.includes('Comercial') || cat.includes('Políticas')) return '#6B7280';
+    return 'var(--claro-red)';
+  };
+
+  // Filter communications
+  const filteredCommunications = useMemo(() => {
+    return (communications || []).filter(c => {
+      if (selectedCategory === '⚡ Solo Modificados (v2.0)') {
+        const hasUpdates = c.isUpdate || c.parentCommId || c.ancVariant || (communications || []).some(other => other.parentCommId === c.id || other.updatesId === c.id);
+        if (!hasUpdates) return false;
+      } else if (selectedCategory !== 'Todos') {
+        if (c.category !== selectedCategory && !c.category?.includes(selectedCategory)) {
+          return false;
+        }
+      }
+      if (searchTerm.trim() !== '') {
+        const q = searchTerm.toLowerCase();
+        const text = ((c.title || c.subject || '') + ' ' + (c.body || '') + ' ' + (c.author || c.sender || '') + ' ' + (c.ancNum || '')).toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [communications, selectedCategory, searchTerm]);
+
+  // Group top-level base announcements for the Timeline
+  const timelineGroups = useMemo(() => {
+    const baseItems = filteredCommunications.filter(c => !c.parentCommId);
+    
+    const groups = {};
+    baseItems.forEach(item => {
+      let dateKey = 'Comunicaciones Recientes';
+      if (item.date) {
+        const parts = item.date.split('-');
+        if (parts.length >= 2) {
+          const [yyyy, mm] = parts;
+          const dateObj = new Date(`${yyyy}-${mm}-01T00:00:00`);
+          if (!isNaN(dateObj.getTime())) {
+            dateKey = dateObj.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' });
+            dateKey = dateKey.charAt(0).toUpperCase() + dateKey.slice(1);
+          } else {
+            dateKey = `${yyyy}-${mm}`;
+          }
+        }
+      }
+
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(item);
+    });
+
+    return Object.entries(groups).map(([dateGroup, items]) => ({
+      dateGroup,
+      items: items.sort((a, b) => new Date(b.date) - new Date(a.date))
+    }));
+  }, [filteredCommunications]);
+
+  const getUpdatesForParent = (parentId) => {
+    return (communications || []).filter(c => c.parentCommId === parentId || c.updatesId === parentId);
+  };
+
+  const renderFormattedClaroEmail = (comm) => {
+    if (!comm) return null;
+
+    const rawBody = comm.body || '';
+    const isHTML = /<[a-z][\s\S]*>/i.test(rawBody) || rawBody.includes('</div>') || rawBody.includes('</p>') || rawBody.includes('<br') || rawBody.includes('</td>');
+
+    let formattedDate = comm.date || '';
+    if (comm.date && comm.date.includes('-')) {
+      const parts = comm.date.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        if (!isNaN(d.getTime())) {
+          formattedDate = d.toLocaleDateString('es-DO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          formattedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+        }
+      }
     }
+
+    const paragraphs = rawBody.split(/\n\s*\n/);
+
+    return (
+      <div className="claro-email-card" style={{ 
+        backgroundColor: '#FFFFFF', 
+        borderRadius: 'var(--radius-md)', 
+        border: '1px solid var(--border-color)', 
+        boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+        overflow: 'hidden',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+      }}>
+        {/* VERSION SWITCHER BANNER FOR MODIFICATIONS & V2.0 */}
+        {activeTimeline.length > 1 && (
+          <div style={{
+            backgroundColor: '#EFF6FF',
+            borderBottom: '2px solid #3B82F6',
+            padding: '12px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justify: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#1E40AF', fontWeight: '800' }}>
+              <GitBranch size={18} style={{ color: '#2563EB' }} />
+              <span>Historial de Versiones & Modificaciones ({activeTimeline.length} versiones registradas):</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {activeTimeline.map((vItem, vIdx) => {
+                const isSelected = vItem.id === comm.id;
+                const verLabel = vIdx === 0 ? 'v1.0 (Anuncio Original)' : `v${(vIdx + 1)}.0 (Modificación ${vItem.ancVariant || ''})`;
+                return (
+                  <button
+                    key={vItem.id}
+                    onClick={() => setActiveCommId(vItem.id)}
+                    style={{
+                      padding: '5px 14px',
+                      borderRadius: '99px',
+                      fontSize: '0.75rem',
+                      fontWeight: '800',
+                      border: isSelected ? '2px solid #2563EB' : '1px solid #93C5FD',
+                      backgroundColor: isSelected ? '#2563EB' : '#FFFFFF',
+                      color: isSelected ? '#FFFFFF' : '#1E40AF',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s ease',
+                      boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.3)' : 'none'
+                    }}
+                  >
+                    {isSelected ? '✓ ' : ''}{verLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* OUTLOOK EMAIL CLIENT HEADER BAR */}
+        <div style={{ 
+          backgroundColor: 'var(--bg-secondary)', 
+          padding: '14px 18px', 
+          borderBottom: '1px solid var(--border-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px'
+        }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <span style={{ fontWeight: '700', color: 'var(--text-muted)' }}>De:</span>
+            <div style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{comm.senderName || comm.author || 'Info-Canales Claro'}</strong>
+              <span style={{ color: 'var(--text-muted)', marginLeft: '6px', wordBreak: 'break-all', overflowWrap: 'anywhere' }}>&lt;{comm.senderEmail || 'info-canales@claro.com.do'}&gt;</span>
+            </div>
+
+            <span style={{ fontWeight: '700', color: 'var(--text-muted)' }}>Para:</span>
+            <span style={{ color: 'var(--text-primary)' }}>Canales de Ventas Corporativas Claro; Consultores IT & Cloud; Fuerza Comercial</span>
+
+            <span style={{ fontWeight: '700', color: 'var(--text-muted)' }}>Fecha:</span>
+            <span style={{ color: 'var(--text-primary)' }}>{formattedDate || comm.date}</span>
+
+            <span style={{ fontWeight: '700', color: 'var(--text-muted)' }}>Asunto:</span>
+            <div style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+              {comm.subject || comm.title}
+            </div>
+          </div>
+        </div>
+
+        {/* OFFICIAL CLARO CORPORATE EMAIL BRAND BANNER */}
+        <div style={{ 
+          background: 'linear-gradient(135deg, #EE1C24 0%, #B91C1C 100%)', 
+          color: '#FFFFFF', 
+          padding: '18px 20px', 
+          display: 'flex', 
+          justify: 'space-between', 
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ 
+              width: '32px', 
+              height: '32px', 
+              borderRadius: '50%', 
+              backgroundColor: '#FFFFFF', 
+              color: '#EE1C24', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justify: 'center',
+              fontWeight: '900',
+              fontSize: '1.1rem',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+            }}>
+              C
+            </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.9 }}>
+                Claro empresas | Comunicado Oficial
+              </div>
+              <div style={{ fontSize: '1rem', fontWeight: '900', letterSpacing: '-0.01em' }}>
+                Boletín Informativo de Canales
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ 
+              fontSize: '0.675rem', 
+              fontWeight: '800', 
+              backgroundColor: 'rgba(255,255,255,0.22)', 
+              color: '#FFFFFF', 
+              padding: '3px 8px', 
+              borderRadius: '99px',
+              textTransform: 'uppercase'
+            }}>
+              {comm.category}
+            </span>
+            {comm.ancNum && (
+              <span style={{ 
+                fontSize: '0.675rem', 
+                fontWeight: '800', 
+                backgroundColor: '#FFFFFF', 
+                color: '#EE1C24', 
+                padding: '3px 8px', 
+                borderRadius: '99px'
+              }}>
+                ANUNCIO NO. {comm.ancNum}{comm.ancVariant ? `-${comm.ancVariant}` : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* EMAIL BODY CONTAINER WITH AMPLE LEFT MARGIN PADDING */}
+        <div style={{ padding: '20px 24px 20px 36px', backgroundColor: '#FFFFFF', color: '#1E293B', overflowX: 'auto' }}>
+          <style>{`
+            .claro-email-native-content {
+              padding-left: 12px !important;
+            }
+            .claro-email-native-content p,
+            .claro-email-native-content div,
+            .claro-email-native-content span {
+              box-sizing: border-box !important;
+            }
+            .claro-email-native-content table {
+              border-collapse: collapse !important;
+              width: 100% !important;
+              margin: 16px 0 !important;
+              font-size: 13px !important;
+            }
+            .claro-email-native-content td, 
+            .claro-email-native-content th {
+              border: 1px solid #CBD5E1 !important;
+              padding: 8px 12px !important;
+              text-align: left !important;
+              vertical-align: top !important;
+            }
+            .claro-email-native-content th {
+              background-color: #F1F5F9 !important;
+              font-weight: 700 !important;
+              color: #0F172A !important;
+            }
+            .claro-email-native-content img {
+              max-width: 100% !important;
+              height: auto !important;
+              display: inline-block !important;
+              margin: 8px 0 !important;
+            }
+            .claro-email-native-content p {
+              margin-bottom: 12px;
+            }
+            .claro-email-native-content a {
+              color: #EE1C24;
+              text-decoration: underline;
+            }
+          `}</style>
+          {isHTML ? (
+            <div 
+              className="claro-email-native-content" 
+              dangerouslySetInnerHTML={{ 
+                __html: rawBody.includes('<body') ? rawBody.match(/<body[^>]*>([\s\S]*)<\/body>/i)[1] : rawBody 
+              }} 
+            />
+          ) : (
+            <div style={{ whiteSpace: 'pre-wrap', color: '#334155', lineHeight: '1.6', fontSize: '0.9rem' }}>
+              {rawBody}
+            </div>
+          )}
+        </div>
+
+        {/* OFFICIAL CLARO CORPORATE SIGNATURE FOOTER */}
+        <div style={{ 
+          backgroundColor: '#F8FAFC', 
+          padding: '16px 20px', 
+          borderTop: '1px solid #E2E8F0',
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '10px',
+          fontSize: '0.75rem',
+          color: '#64748B'
+        }}>
+          <div>
+            <strong style={{ color: '#0F172A' }}>Compañía Dominicana de Teléfonos, S.A. (Claro)</strong> <br />
+            <span>Dirección de Soluciones Corporativas & Canales de Ventas</span>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span>Santo Domingo, República Dominicana</span> <br />
+            <span style={{ color: '#EE1C24', fontWeight: '600' }}>soporte-canales@claro.com.do</span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
 
@@ -838,8 +1178,8 @@ ${stripHtml(email.body)}`;
 
             {/* Communications List container */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '550px', overflowY: 'auto', paddingRight: '4px' }}>
-              {sortedComms.length > 0 ? (
-                sortedComms.map(comm => (
+              {filteredCommunications.length > 0 ? (
+                filteredCommunications.map(comm => (
                   <div 
                     key={comm.id}
                     onClick={() => setActiveCommId(comm.id)}
@@ -937,40 +1277,13 @@ ${stripHtml(email.body)}`;
           </div>
 
           {/* Right panel: Details & update timeline */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
             {activeComm ? (
-              <div className="glass-panel animate-slide-right" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', minHeight: '450px', overflowY: 'auto' }}>
+              <div className="glass-panel animate-slide-right" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', minHeight: '450px', overflowY: 'auto', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
                 
-                {/* Header detail */}
-                <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <span style={{ 
-                      fontSize: '0.75rem', 
-                      fontWeight: '700', 
-                      textTransform: 'uppercase', 
-                      color: '#FFFFFF',
-                      backgroundColor: getCategoryColor(activeComm.category),
-                      padding: '4px 10px',
-                      borderRadius: 'var(--radius-sm)'
-                    }}>
-                      {activeComm.category}
-                    </span>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Calendar size={14} /> Emitido el {activeComm.date}
-                    </span>
-                  </div>
-                  <h3 style={{ fontSize: '1.4rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' }}>
-                    {activeComm.title}
-                  </h3>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', gap: '16px' }}>
-                    <span>Emitido por: <strong>{activeComm.author}</strong></span>
-                    <span>Versión actual: <strong>v{activeComm.version}</strong></span>
-                  </div>
-                </div>
-
-                {/* Document body */}
-                <div style={{ flex: 1, color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}>
-                  {stripHtml(activeComm.body)}
+                {/* Authentic Claro Corporate Email Viewer */}
+                <div style={{ flex: 1 }}>
+                  {renderFormattedClaroEmail(activeComm)}
                 </div>
 
                 {/* Original Email details if Auto-Ingested */}
